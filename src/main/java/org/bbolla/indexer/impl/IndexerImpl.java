@@ -8,6 +8,9 @@ import java.util.Map;
 
 /**
  * Using ignite to implement the indexer.
+ * Save to memory <= keep only the latest records / order of insertion
+ * Push the past records to disk for later access.
+ * Data Affinity => Place records of same timestamp in the same node.
  */
 public class IndexerImpl implements IndexerSpec {
 
