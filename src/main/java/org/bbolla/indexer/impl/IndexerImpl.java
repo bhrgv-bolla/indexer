@@ -1,10 +1,15 @@
 package org.bbolla.indexer.impl;
 
+import org.apache.ignite.Ignite;
+import org.apache.ignite.IgniteCache;
+import org.apache.ignite.configuration.CacheConfiguration;
 import org.bbolla.indexer.specification.IndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
 
 /**
  * Using ignite to implement the indexer.
@@ -14,18 +19,44 @@ import java.util.Map;
  */
 public class IndexerImpl implements IndexerSpec {
 
-    @Override
-    public void index(String key, String val, long[] rows) {
+    private Ignite ignite;
+    private IgniteCache<String, Roaring64NavigableMap> cacheMap;
+    private final static String INDEXER_CACHE = "indexer_cache";
 
+    public IndexerImpl(Server server) {
+        ignite = server.getIgniteInstance();
+        cacheMap = ignite.getOrCreateCache(INDEXER_CACHE);
     }
 
     @Override
-    public void index(String key, String val, long row) {
+    public void index(DateTime today, String key, String val, long[] rows) {
+        String theKey = key(today, key, val);
+        Lock lock = cacheMap.lock(theKey);
+        lock.lock();
+        Roaring64NavigableMap rr = cacheMap.get(theKey);
+        rr.add(rows);
+        rr.runOptimize();
+        cacheMap.put(key(today, key, val), rr);
+        lock.unlock();
+    }
 
+    /**
+     * Utility to prepare the key.
+     * @param key
+     * @param val
+     * @return
+     */
+    private String key(DateTime today, String key, String val) {
+        return "p_"+ key+ "_v_" + val;
     }
 
     @Override
-    public void adddTimeIndex(DateTime startTime, DateTime endTime, long startInclusive, long endExclusive) {
+    public void index(DateTime today, String key, String val, long row) {
+        index(today, key, val, new long[]{row});
+    }
+
+    @Override
+    public void addTimeIndex(DateTime startTime, DateTime endTime, long startInclusive, long endExclusive) {
 
     }
 

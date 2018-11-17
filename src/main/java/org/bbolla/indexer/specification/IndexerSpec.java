@@ -9,19 +9,21 @@ public interface IndexerSpec {
 
     /**
      * Let the indexer know of multiple occurrences of a key, value
+     * @param today
      * @param key
      * @param val
      * @param rows
      */
-    void index(String key, String val, long[] rows);
+    void index(DateTime today, String key, String val, long[] rows);
 
     /**
      * Let the index know of a key, value occurrence.
+     * @param today
      * @param key
      * @param val
      * @param row
      */
-    void index(String key, String val, long row);
+    void index(DateTime today, String key, String val, long row);
 
     /**
      * Inform the indexer that this row ids exist in
@@ -30,7 +32,7 @@ public interface IndexerSpec {
      * @param startInclusive
      * @param endExclusive
      */
-    void adddTimeIndex(DateTime startTime, DateTime endTime, long startInclusive, long endExclusive);
+    void addTimeIndex(DateTime startTime, DateTime endTime, long startInclusive, long endExclusive);
 
     /**
      * Returns a map of dates and all rows in that date.
