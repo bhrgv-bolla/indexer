@@ -2,7 +2,6 @@ package org.bbolla.indexer.impl;
 
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
-import org.apache.ignite.configuration.CacheConfiguration;
 import org.bbolla.indexer.specification.IndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
@@ -21,6 +20,12 @@ public class IndexerImpl implements IndexerSpec {
 
     private Ignite ignite;
     private IgniteCache<String, Roaring64NavigableMap> cacheMap;
+
+    /**
+     * Time to id map.
+     */
+    private IgniteCache<String, Long> timeToIDMap;
+
     private final static String INDEXER_CACHE = "indexer_cache";
 
     public IndexerImpl(Server server) {
@@ -57,7 +62,7 @@ public class IndexerImpl implements IndexerSpec {
 
     @Override
     public void addTimeIndex(DateTime startTime, DateTime endTime, long startInclusive, long endExclusive) {
-
+        timeToIDMap.put(endTime.toString(), endExclusive);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package org.bbolla.indexer.specification;
 
+import com.google.common.collect.Maps;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
 
@@ -41,6 +42,18 @@ public interface IndexerSpec {
      * @return
      */
     Map<DateTime, long[]> getRowIDs(Map<String, String> filters, Interval interval);
+
+
+    /**
+     * Returns all row ids in a particular interval.
+     * The returned result can contain records that fall out of the original timestamp.
+     * The exact records can be obtained by filtering the complete records.
+     * @param interval
+     * @return
+     */
+    default Map<DateTime, long[]> getAllRowIDsInAnInterval(Interval interval) {
+        return getRowIDs(Maps.newHashMap(), interval);
+    }
 
 
 
