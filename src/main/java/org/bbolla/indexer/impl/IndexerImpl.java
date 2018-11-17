@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * Using ignite to implement the indexer.
  */
-public class IgniteIndexerImpl implements IndexerSpec {
+public class IndexerImpl implements IndexerSpec {
 
     @Override
     public void index(String key, String val, long[] rows) {
