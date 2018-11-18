@@ -22,6 +22,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
 
 
     public TimeIndexerImpl(Server server, int windowTimeInMinutes) {
+        //TODO configure native persistence for time indexer.
         Ignite ignite = server.getIgniteInstance();
         this.trMap = ignite.getOrCreateCache(TIME_INDEXER_CACHE);
         this.WINDOW_TIME_IN_MINUTES = windowTimeInMinutes;
@@ -41,7 +42,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
 
     private Map<String,long[]> getRowRangeForEachDayInInterval(LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay) {
         Map<String, long[]> rrMap = Maps.newHashMap(); // rowRangeMap
-        for(Map.Entry<DateTime, List<DateTime>> entry : bucketKeysByDay.entrySet()) {
+        for(Map.Entry<DateTime, List<DateTime>> entry : bucketKeysByDay.entrySet()) { //Optimize the call; by using bulk get call?
             List<DateTime> partialKeysInADay = entry.getValue();
             Collections.sort(partialKeysInADay); //TODO see if this is unnecessary.
             long[] rowsFirst = trMap.get(partialKeysInADay.get(0).toString());
