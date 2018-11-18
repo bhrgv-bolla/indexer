@@ -1,5 +1,7 @@
 package org.bbolla.indexer.impl;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
@@ -7,7 +9,7 @@ import org.bbolla.indexer.specification.TimeIndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
 
-import java.util.Map;
+import java.util.*;
 
 @Slf4j
 public class TimeIndexerImpl implements TimeIndexerSpec {
@@ -27,8 +29,65 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
 
     @Override
     public Map<String, long[]> getAllRowsInAnInterval(Interval interval) {
-        DateTime start = findKeyBefore(interval.getStart(), WINDOW_TIME_IN_MINUTES * 60 * 1000);
+        DateTime start = findKeyBefore(interval.getStart());
+        DateTime end = findKeyBefore(interval.getEnd());
+        // from start to end get all rows.
+        List<DateTime> allKeysForAnInterval = keys(start, end);
+        LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay = bucketKeysByDay(allKeysForAnInterval);
+        //Assume every key exists.
+        Map<String, long[]> result = getRowRangeForEachDayInInterval(bucketKeysByDay);
         return null;
+    }
+
+    private Map<String,long[]> getRowRangeForEachDayInInterval(LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay) {
+        Map<String, long[]> rrMap = Maps.newHashMap(); // rowRangeMap
+        for(Map.Entry<DateTime, List<DateTime>> entry : bucketKeysByDay.entrySet()) {
+            List<DateTime> partialKeysInADay = entry.getValue();
+            Collections.sort(partialKeysInADay); //TODO see if this is unnecessary.
+            long[] rowsFirst = trMap.get(partialKeysInADay.get(0).toString());
+            long[] rowsLast = trMap.get(partialKeysInADay.get(partialKeysInADay.size() - 1).toString());
+            long[] rowsInThisDay = new long[]{rowsFirst[0], rowsLast[1]};
+            String dayKey = entry.getKey().toString();
+            rrMap.put(dayKey, rowsInThisDay);
+        }
+        return rrMap;
+    }
+
+    /**
+     * Converts keys that from a single list into a map of lists with keys as start of the day.
+     * @param allKeysForAnInterval
+     * @return
+     */
+    private static LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay(List<DateTime> allKeysForAnInterval) {
+        LinkedHashMap<DateTime, List<DateTime>> result = Maps.newLinkedHashMap();
+        Collections.sort(allKeysForAnInterval);
+        for(DateTime current : allKeysForAnInterval) {
+            DateTime startOfDay = current.withTimeAtStartOfDay();
+            if(result.get(startOfDay) == null) result.put(startOfDay, Lists.newArrayList());
+            result.get(startOfDay).add(current);
+        }
+        return result;
+    }
+
+    private List<DateTime> keys(DateTime start, DateTime end) {
+        return findAllKeysInInterval(start, end, minutesToMillis(WINDOW_TIME_IN_MINUTES));
+    }
+
+    private static List<DateTime> findAllKeysInInterval(DateTime start, DateTime end, long offsetMillis) {
+        List<DateTime> allKeysInInterval = Lists.newArrayList();
+        // with a start and end. generate all possible keys.
+        for(DateTime current = start; current.isBefore(end.plusMillis(1)); current = current.plusMillis((int) offsetMillis)) {
+            allKeysInInterval.add(current);
+        }
+        return allKeysInInterval;
+    }
+
+    private DateTime findKeyBefore(DateTime input) {
+        return findKeyBefore(input, minutesToMillis(WINDOW_TIME_IN_MINUTES));
+    }
+
+    private static long minutesToMillis(int minutes) {
+        return minutes * 60 * 1000;
     }
 
     /**
