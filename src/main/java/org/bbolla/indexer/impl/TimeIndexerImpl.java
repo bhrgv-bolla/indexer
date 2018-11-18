@@ -77,7 +77,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
     private static List<DateTime> findAllKeysInInterval(DateTime start, DateTime end, long offsetMillis) {
         List<DateTime> allKeysInInterval = Lists.newArrayList();
         // with a start and end. generate all possible keys.
-        for(DateTime current = start; current.isBefore(end.plusMillis(1)); current = current.plusMillis((int) offsetMillis)) {
+        for(DateTime current = start; current.isBefore(end); current = current.plusMillis((int) offsetMillis)) {
             allKeysInInterval.add(current);
         }
         return allKeysInInterval;
