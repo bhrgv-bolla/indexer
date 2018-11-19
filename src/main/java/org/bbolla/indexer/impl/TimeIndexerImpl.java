@@ -3,6 +3,7 @@ package org.bbolla.indexer.impl;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
@@ -12,6 +13,7 @@ import org.joda.time.Interval;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Read and write row ranges in a time range.
@@ -21,31 +23,47 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class TimeIndexerImpl implements TimeIndexerSpec {
 
-    private IgniteCache<String, long[]> trMap;
-
     private static final String TIME_INDEXER_CACHE = "time_cache";
+    private static final String DATE_KEYS_CACHE = "date_key_cache";
 
-    private final int WINDOW_TIME_IN_MINUTES;
+    private IgniteCache<String, long[]> trMap;
+    private IgniteCache<String, List<String>> dateKeys; //add date keys
 
 
-    public TimeIndexerImpl(Server server, int windowTimeInMinutes) {
+    public TimeIndexerImpl(Server server) {
         //TODO configure native persistence for time indexer.
         Ignite ignite = server.getIgniteInstance();
         this.trMap = ignite.getOrCreateCache(TIME_INDEXER_CACHE);
-        this.WINDOW_TIME_IN_MINUTES = windowTimeInMinutes;
+        this.dateKeys = ignite.getOrCreateCache(DATE_KEYS_CACHE);
     }
 
     @Override
     public Map<String, long[]> getAllRowsInAnInterval(Interval interval) {
-        DateTime start = findKeyBefore(interval.getStart());
-        DateTime end = findKeyBefore(interval.getEnd());
         // from start to end get all rows.
-        List<DateTime> allKeysForAnInterval = keys(start, end);
+        List<DateTime> allKeysForAnInterval = keys(interval);
         LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay = bucketKeysByDay(allKeysForAnInterval);
         log.debug("bucket keys: {}", bucketKeysByDay);
         //Assume every key exists.
         Map<String, long[]> result = getRowRangeForEachDayInInterval(bucketKeysByDay);
         return result;
+    }
+
+    private List<DateTime> keys(Interval interval) {
+        List<String> days = Lists.newArrayList();
+        for(DateTime current = interval.getStart(); current.isBefore(interval.getEnd()); current = current.plusDays(1)) { //All days in the interval
+            days.add(current.withTimeAtStartOfDay().toString());
+        }
+
+        Map<String, List<String>> allKeys = dateKeys.getAll(Sets.newHashSet(days));
+
+        if(allKeys == null) return Lists.newArrayList();
+        else {
+            return allKeys.entrySet().stream().flatMap(e -> e.getValue()
+                    .stream()
+                    .map(d -> DateTime.parse(d)))
+                    .filter(d -> interval.contains(d))
+                    .collect(Collectors.toList());
+        }
     }
 
     /**
@@ -75,7 +93,6 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
      */
     private static LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay(List<DateTime> allKeysForAnInterval) {
         LinkedHashMap<DateTime, List<DateTime>> result = Maps.newLinkedHashMap();
-        Collections.sort(allKeysForAnInterval);
         for(DateTime current : allKeysForAnInterval) {
             DateTime startOfDay = current.withTimeAtStartOfDay();
             if(result.get(startOfDay) == null) result.put(startOfDay, Lists.newArrayList());
@@ -84,62 +101,27 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
         return result;
     }
 
-    private List<DateTime> keys(DateTime start, DateTime end) {
-        return findAllKeysInInterval(start, end, minutesToMillis(WINDOW_TIME_IN_MINUTES));
-    }
-
-    private static List<DateTime> findAllKeysInInterval(DateTime start, DateTime end, long offsetMillis) {
-        List<DateTime> allKeysInInterval = Lists.newArrayList();
-        // with a start and end. generate all possible keys.
-        for(DateTime current = start; current.isBefore(end); current = current.plusMillis((int) offsetMillis)) {
-            allKeysInInterval.add(current);
-        }
-        return allKeysInInterval;
-    }
-
-    private DateTime findKeyBefore(DateTime input) {
-        return findKeyBefore(input, minutesToMillis(WINDOW_TIME_IN_MINUTES));
-    }
-
-    private static long minutesToMillis(int minutes) {
-        return minutes * 60 * 1000;
-    }
-
-    /**
-     * TODO pending
-     * Simple math to get the date before a start time
-     * @param startTime
-     * @param windowTimeInMillis
-     * @return
-     */
-    private static DateTime findKeyBefore(DateTime startTime, long windowTimeInMillis) {
-        long millisInDay = startTime.getMillis() - startTime.withTimeAtStartOfDay().getMillis();
-        long offset = millisInDay / windowTimeInMillis;
-        offset = offset * windowTimeInMillis;
-        long result = startTime.withTimeAtStartOfDay().getMillis() + offset;
-        return new DateTime(result);
-    }
 
     @Override
     public void storeAllRowsInAnInterval(Interval interval, long[] startInclusiveAndEndExclusive) {
         //Can be multiple saves.
         //We will store with the start time; how many rows are there in the interval.
         trMap.put(interval.getStart().toString(), startInclusiveAndEndExclusive);
+
+        //Add to date keys (Since a new date key only adds every once in few mins); this doesn't need to locking.
+        String keyForInterval = interval.getStart().withTimeAtStartOfDay().toString();
+        List<String> allKeysInDay = dateKeys.get(keyForInterval);
+        if(allKeysInDay == null) allKeysInDay = Lists.newArrayList();
+        allKeysInDay.add(interval.getStart().toString());
+        dateKeys.put(keyForInterval, allKeysInDay);
     }
 
 
 
     public static void main(String[] args) {
-        DateTime result = findKeyBefore(DateTime.now(), 5* 60 * 1000);
-        log.info("Result is {}", result);
-        List<DateTime> allKeys = findAllKeysInInterval(DateTime.parse("2018-10-10T20:33:00Z"),
-                DateTime.parse("2018-10-12T20:33:00Z"),
-                5 * 60 * 1000);
-        log.info("All keys in interval {}", allKeys);
-
+        
         Server server = new Server();
-        int windowTime = 5;
-        TimeIndexerImpl timeSpec = new TimeIndexerImpl(server, windowTime);
+        TimeIndexerImpl timeSpec = new TimeIndexerImpl(server);
         Stopwatch stopwatch = Stopwatch.createStarted();
         Interval interval = new Interval("2018-10-10T10:00:00Z/PT5M");
         timeSpec.storeAllRowsInAnInterval(interval, new long[] {0, 1000});

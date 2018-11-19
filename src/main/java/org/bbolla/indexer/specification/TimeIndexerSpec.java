@@ -23,4 +23,6 @@ public interface TimeIndexerSpec {
      * @param startInclusiveAndEndExclusive
      */
     void storeAllRowsInAnInterval(Interval interval, long[] startInclusiveAndEndExclusive);
+
+
 }
