@@ -35,11 +35,18 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
         // from start to end get all rows.
         List<DateTime> allKeysForAnInterval = keys(start, end);
         LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay = bucketKeysByDay(allKeysForAnInterval);
+        log.debug("bucket keys: {}", bucketKeysByDay);
         //Assume every key exists.
         Map<String, long[]> result = getRowRangeForEachDayInInterval(bucketKeysByDay);
-        return null;
+        log.debug("result: {}", result);
+        return result;
     }
 
+    /**
+     * Utility method to return the row range from each partition.
+     * @param bucketKeysByDay
+     * @return
+     */
     private Map<String,long[]> getRowRangeForEachDayInInterval(LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay) {
         Map<String, long[]> rrMap = Maps.newHashMap(); // rowRangeMap
         for(Map.Entry<DateTime, List<DateTime>> entry : bucketKeysByDay.entrySet()) { //Optimize the call; by using bulk get call?
@@ -108,7 +115,9 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
 
     @Override
     public void storeAllRowsInAnInterval(Interval interval, long[] startInclusiveAndEndExclusive) {
-
+        //Can be multiple saves.
+        //We will store with the start time; how many rows are there in the interval.
+        trMap.put(interval.getStart().toString(), startInclusiveAndEndExclusive);
     }
 
 
@@ -120,5 +129,16 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
                 DateTime.parse("2018-10-12T20:33:00Z"),
                 5 * 60 * 1000);
         log.info("All keys in interval {}", allKeys);
+
+        Server server = new Server();
+        int windowTime = 5;
+        TimeIndexerImpl timeSpec = new TimeIndexerImpl(server, windowTime);
+        Interval interval = new Interval("2018-10-10T10:00:00Z/PT5M");
+        timeSpec.storeAllRowsInAnInterval(interval, new long[] {0, 1000});
+        Map<String, long[]> allRows = timeSpec.getAllRowsInAnInterval(interval);
+        for(Map.Entry<String, long[]> row : allRows.entrySet()) {
+            log.info("All rows {} => {} : {}", interval, row.getKey(), Arrays.toString(row.getValue()));
+        }
+
     }
 }
