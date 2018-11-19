@@ -73,16 +73,36 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
      */
     private Map<String,long[]> getRowRangeForEachDayInInterval(LinkedHashMap<DateTime, List<DateTime>> bucketKeysByDay) {
         Map<String, long[]> rrMap = Maps.newHashMap(); // rowRangeMap
+
+        Set<String> keys = Sets.newHashSet();
+
+        //collect keys
         for(Map.Entry<DateTime, List<DateTime>> entry : bucketKeysByDay.entrySet()) { //Optimize the call; by using bulk get call?
             List<DateTime> partialKeysInADay = entry.getValue();
-            Collections.sort(partialKeysInADay); //TODO see if this is unnecessary.
-            //TODO review? gracefully degrade the timestamp. until a key is found?
-            long[] rowsFirst = trMap.get(partialKeysInADay.get(0).toString());
-            long[] rowsLast = trMap.get(partialKeysInADay.get(partialKeysInADay.size() - 1).toString());
-            long[] rowsInThisDay = new long[]{rowsFirst[0], rowsLast[1]};
-            String dayKey = entry.getKey().toString();
-            rrMap.put(dayKey, rowsInThisDay);
+            Collections.sort(partialKeysInADay);
+            keys.add(partialKeysInADay.get(0).toString());
+            keys.add(partialKeysInADay.get(partialKeysInADay.size() - 1).toString());
         }
+
+        Map<String, long[]> rowRanges = trMap.getAll(keys);
+        List<String> exceptions = Lists.newArrayList();
+
+        //operate on keys
+        for(Map.Entry<DateTime, List<DateTime>> entry : bucketKeysByDay.entrySet()) { //Optimize the call; by using bulk get call?
+            List<DateTime> partialKeysInADay = entry.getValue();
+            long[] rowsFirst = rowRanges.get(partialKeysInADay.get(0).toString());
+            long[] rowsLast = rowRanges.get(partialKeysInADay.get(partialKeysInADay.size() - 1).toString());
+            String dayKey = entry.getKey().toString();
+            if(rowsFirst != null && rowsLast != null) {
+                long[] rowsInThisDay = new long[]{rowsFirst[0], rowsLast[1]};
+                rrMap.put(dayKey, rowsInThisDay);
+            } else {
+                exceptions.add("Couldn't find rows for day : "+ dayKey); //TODO bubble these exceptions.
+            }
+        }
+
+        if(exceptions.size() > 0) log.warn("Some date keys are missing? {}", exceptions);
+
         return rrMap;
     }
 
@@ -143,7 +163,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
 
         ts.storeAllRowsInAnInterval(testInterval, new long[] {1000, 5000});
 
-        Map<String, long[]> rs = ts.getAllRowsInAnInterval(testInterval.withStart(DateTime.parse("2018-10-10T10:00:00Z")));
+        Map<String, long[]> rs = ts.getAllRowsInAnInterval(new Interval("2018-10-01T15:00:00Z/P50D"));
 
         stopwatch.stop();
 
