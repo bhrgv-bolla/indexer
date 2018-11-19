@@ -1,5 +1,6 @@
 package org.bbolla.indexer.impl;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import lombok.extern.slf4j.Slf4j;
@@ -10,7 +11,13 @@ import org.joda.time.DateTime;
 import org.joda.time.Interval;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * Read and write row ranges in a time range.
+ * Collect them back very fast. ~3 ms/ 4 ms.
+ * TODO tests for edge cases.
+ */
 @Slf4j
 public class TimeIndexerImpl implements TimeIndexerSpec {
 
@@ -38,7 +45,6 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
         log.debug("bucket keys: {}", bucketKeysByDay);
         //Assume every key exists.
         Map<String, long[]> result = getRowRangeForEachDayInInterval(bucketKeysByDay);
-        log.debug("result: {}", result);
         return result;
     }
 
@@ -52,6 +58,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
         for(Map.Entry<DateTime, List<DateTime>> entry : bucketKeysByDay.entrySet()) { //Optimize the call; by using bulk get call?
             List<DateTime> partialKeysInADay = entry.getValue();
             Collections.sort(partialKeysInADay); //TODO see if this is unnecessary.
+            //TODO review? gracefully degrade the timestamp. until a key is found?
             long[] rowsFirst = trMap.get(partialKeysInADay.get(0).toString());
             long[] rowsLast = trMap.get(partialKeysInADay.get(partialKeysInADay.size() - 1).toString());
             long[] rowsInThisDay = new long[]{rowsFirst[0], rowsLast[1]};
@@ -133,6 +140,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
         Server server = new Server();
         int windowTime = 5;
         TimeIndexerImpl timeSpec = new TimeIndexerImpl(server, windowTime);
+        Stopwatch stopwatch = Stopwatch.createStarted();
         Interval interval = new Interval("2018-10-10T10:00:00Z/PT5M");
         timeSpec.storeAllRowsInAnInterval(interval, new long[] {0, 1000});
         Map<String, long[]> allRows = timeSpec.getAllRowsInAnInterval(interval);
@@ -140,5 +148,25 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
             log.info("All rows {} => {} : {}", interval, row.getKey(), Arrays.toString(row.getValue()));
         }
 
+
+        /**
+         * Sample calls.
+         */
+
+        log.info("~~~~~~~~~~~~~~~~~~SAMPLE CALLS~~~~~~~~~~~~~~~~~~~~");
+
+        TimeIndexerSpec ts = timeSpec;
+
+        Interval testInterval = new Interval("2018-10-10T15:00:00Z/PT5M");
+
+        ts.storeAllRowsInAnInterval(testInterval, new long[] {1000, 5000});
+
+        Map<String, long[]> rs = ts.getAllRowsInAnInterval(testInterval.withStart(DateTime.parse("2018-10-10T10:00:00Z")));
+
+        stopwatch.stop();
+
+        log.info("Took {} ms : Result {}", stopwatch.elapsed(TimeUnit.MILLISECONDS), Utils.toString(rs));
+
+        server.getIgniteInstance().close();
     }
 }
