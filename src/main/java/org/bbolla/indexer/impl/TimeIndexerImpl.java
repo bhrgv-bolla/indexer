@@ -116,5 +116,9 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
     public static void main(String[] args) {
         DateTime result = findKeyBefore(DateTime.now(), 5* 60 * 1000);
         log.info("Result is {}", result);
+        List<DateTime> allKeys = findAllKeysInInterval(DateTime.parse("2018-10-10T20:33:00Z"),
+                DateTime.parse("2018-10-12T20:33:00Z"),
+                5 * 60 * 1000);
+        log.info("All keys in interval {}", allKeys);
     }
 }
