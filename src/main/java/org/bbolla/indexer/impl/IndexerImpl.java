@@ -1,14 +1,20 @@
 package org.bbolla.indexer.impl;
 
+import com.google.common.collect.Lists;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.bbolla.indexer.specification.IndexerSpec;
+import org.bbolla.indexer.specification.TimeIndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
+import org.roaringbitmap.longlong.LongIterator;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.locks.Lock;
 
 /**
  * Using ignite to implement the indexer.
@@ -17,57 +23,136 @@ import java.util.concurrent.locks.Lock;
  * Data Affinity => Place records of same timestamp in the same node.
  * Indexer can assume that index additions come less frequently than reads (Ex: 1 new index addition in a ~min; pre-aggregations take care of active indices.)
  */
+@Slf4j
 public class IndexerImpl implements IndexerSpec {
 
+    //Maximum size.
+    private static final int THRESHOLD_SIZE = 1000000;
+    private static final String DIMENSIONS_CACHE = "dimensions_cache";
     private Ignite ignite;
     private IgniteCache<String, Roaring64NavigableMap> cacheMap;
+    private IgniteCache<String, List<DimensionPartitionMetaInfo>> dmMap; //Dimension Meta Info Map.
+    private TimeIndexerSpec ti;
 
-    /**
-     * Time to id map.
-     */
-    private IgniteCache<String, Long> timeToIDMap;
 
     private final static String INDEXER_CACHE = "indexer_cache";
 
-    public IndexerImpl(Server server) {
+    public IndexerImpl(Server server, TimeIndexerSpec ti) {
         ignite = server.getIgniteInstance();
         cacheMap = ignite.getOrCreateCache(INDEXER_CACHE);
-    }
-
-    @Override
-    public void index(DateTime today, String key, String val, long[] rows) {
-        String theKey = key(today, key, val);
-        Lock lock = cacheMap.lock(theKey);
-        lock.lock();
-        Roaring64NavigableMap rr = cacheMap.get(theKey);
-        rr.add(rows);
-        rr.runOptimize();
-        cacheMap.put(key(today, key, val), rr);
-        lock.unlock();
+        this.ti = ti;
+        dmMap = ignite.getOrCreateCache(DIMENSIONS_CACHE);
     }
 
     /**
      * Utility to prepare the key.
      * @param key
      * @param val
+     * @param partitionNumber
      * @return
      */
-    private String key(DateTime today, String key, String val) {
-        return "p_"+ key+ "_v_" + val;
+    private String key(DateTime today, String key, String val, int partitionNumber) {
+        return "d_"+ today.withTimeAtStartOfDay().toString() +"_p_"+ key+ "_v_" + val+"_pn_" + partitionNumber;
     }
 
     @Override
-    public void index(DateTime today, String key, String val, long row) {
-        index(today, key, val, new long[]{row});
+    public void index(DateTime startOfDay, String key, String val, Roaring64NavigableMap rows) {
+        startOfDay = startOfDay.withTimeAtStartOfDay();
+        List<DimensionPartitionMetaInfo> partitions = dmMap.get(startOfDay.toString());
+        if(partitions == null) {
+            partitions = Lists.newArrayList();
+        }
+        //sort all partitions.
+        Collections.sort(partitions, Comparator.comparingInt(DimensionPartitionMetaInfo::getPartitionNumber));
+        if(partitions.size() == 0) partitions.add(newPartition(0));
+        //last partition.
+        DimensionPartitionMetaInfo lastPartition = partitions.get(partitions.size() - 1);
+
+        int combinedSize = rows.getSizeInBytes() + lastPartition.getSizeInBytes();
+        if(combinedSize > THRESHOLD_SIZE) {
+            //create a new partition.
+            lastPartition = newPartition(lastPartition.getPartitionNumber() + 1);
+            partitions.add(lastPartition);
+        }
+
+
+        String theKey = key(startOfDay, key, val, lastPartition.getPartitionNumber());
+
+        Roaring64NavigableMap rr = cacheMap.get(theKey);
+        if(rr == null) rr = Roaring64NavigableMap.bitmapOf();
+        rr.or(rows);
+        rr.runOptimize();
+        lastPartition.setSizeInBytes(rr.getSizeInBytes());
+
+        //modify cache here.
+        dmMap.put(key(startOfDay, key, val), partitions);
+        cacheMap.put(theKey, rr);
+    }
+
+    private String key(DateTime startOfDay, String key, String val) {
+        return "d_"+ startOfDay.withTimeAtStartOfDay().toString() +"_p_"+ key+ "_v_" + val;
+    }
+
+    private DimensionPartitionMetaInfo newPartition(int pNum) {
+        DimensionPartitionMetaInfo dp = new DimensionPartitionMetaInfo();
+        dp.setPartitionNumber(pNum);
+        dp.setRange(null);
+        dp.setSizeInBytes(0);
+        return dp;
+    }
+
+    @Override
+    public void index(DateTime startOfDay, String key, String val, long row) {
+        index(startOfDay, key, val, Roaring64NavigableMap.bitmapOf(row));
     }
 
     @Override
     public void addTimeIndex(DateTime startTime, DateTime endTime, long startInclusive, long endExclusive) {
-        timeToIDMap.put(endTime.toString(), endExclusive);
+        ti.storeAllRowsInAnInterval(new Interval(startTime, endTime), new long[]{startInclusive, endExclusive});
     }
 
     @Override
     public Map<DateTime, long[]> getRowIDs(Map<String, String> filters, Interval interval) {
         return null;
+    }
+
+
+
+    public static void main(String[] args) {
+        Server server = new Server();
+        TimeIndexerSpec ts = new TimeIndexerImpl(server);
+        IndexerImpl indexer = new IndexerImpl(server, ts);
+
+        Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
+
+        for(int i=0; i<10000; i++) {
+            rr.add(i);
+
+            indexer.index(DateTime.now(), "test", "24", i);
+        }
+
+
+        indexer.dmMap.forEach(
+                e -> log.info("dmMap Entry: {}", e)
+        );
+
+        indexer.cacheMap.forEach(
+                e -> {
+                    log.info("cacheMap Entry : {}", e);
+                    log.info("results: {}", e.getValue().toArray());
+                }
+        );
+
+        Roaring64NavigableMap rr2 = indexer.cacheMap.get("d_2018-11-20T00:00:00.000-08:00_p_test_v_24_pn_0");
+
+        LongIterator iterator = rr2.getLongIterator();
+
+//        while(iterator.hasNext()) {
+//            log.info("{}", iterator.next());
+//        }
+
+        log.info("RR: {}", rr);
+
+        server.getIgniteInstance().close();
     }
 }

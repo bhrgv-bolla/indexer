@@ -3,6 +3,7 @@ package org.bbolla.indexer.specification;
 import com.google.common.collect.Maps;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.Map;
 
@@ -10,21 +11,21 @@ public interface IndexerSpec {
 
     /**
      * Let the indexer know of multiple occurrences of a key, value
-     * @param today
+     * @param startOfDay
      * @param key
      * @param val
      * @param rows
      */
-    void index(DateTime today, String key, String val, long[] rows);
+    void index(DateTime startOfDay, String key, String val, Roaring64NavigableMap rows);
 
     /**
      * Let the index know of a key, value occurrence.
-     * @param today
+     * @param startOfDay
      * @param key
      * @param val
      * @param row
      */
-    void index(DateTime today, String key, String val, long row);
+    void index(DateTime startOfDay, String key, String val, long row);
 
     /**
      * Inform the indexer that this row ids exist in
