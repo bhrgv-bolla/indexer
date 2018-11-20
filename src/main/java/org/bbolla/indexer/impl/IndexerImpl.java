@@ -15,6 +15,7 @@ import java.util.concurrent.locks.Lock;
  * Save to memory <= keep only the latest records / order of insertion
  * Push the past records to disk for later access.
  * Data Affinity => Place records of same timestamp in the same node.
+ * Indexer can assume that index additions come less frequently than reads (Ex: 1 new index addition in a ~min; pre-aggregations take care of active indices.)
  */
 public class IndexerImpl implements IndexerSpec {
 
