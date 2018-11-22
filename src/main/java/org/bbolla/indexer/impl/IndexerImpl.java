@@ -1,20 +1,24 @@
 package org.bbolla.indexer.impl;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.configuration.CacheConfiguration;
+import org.apache.ignite.lang.IgniteCallable;
+import org.apache.ignite.lang.IgniteFuture;
 import org.bbolla.indexer.specification.IndexerSpec;
 import org.bbolla.indexer.specification.TimeIndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Using ignite to implement the indexer.
@@ -50,13 +54,14 @@ public class IndexerImpl implements IndexerSpec {
 
     /**
      * Utility to prepare the key.
+     *
      * @param key
      * @param val
      * @param partitionNumber
      * @return
      */
     private String key(DateTime today, String key, String val, int partitionNumber) {
-        return "d_"+ today.withTimeAtStartOfDay().toString() +"_p_"+ key+ "_v_" + val+"_pn_" + partitionNumber;
+        return "d_" + today.withTimeAtStartOfDay().toString() + "_p_" + key + "_v_" + val + "_pn_" + partitionNumber;
     }
 
     @Override
@@ -65,17 +70,17 @@ public class IndexerImpl implements IndexerSpec {
 
         startOfDay = startOfDay.withTimeAtStartOfDay();
         List<DimensionPartitionMetaInfo> partitions = dmMap.get(startOfDay.toString());
-        if(partitions == null) {
+        if (partitions == null) {
             partitions = Lists.newArrayList();
         }
         //sort all partitions.
         Collections.sort(partitions, Comparator.comparingInt(DimensionPartitionMetaInfo::getPartitionNumber));
-        if(partitions.size() == 0) partitions.add(newPartition(0));
+        if (partitions.size() == 0) partitions.add(newPartition(0));
         //last partition.
         DimensionPartitionMetaInfo lastPartition = partitions.get(partitions.size() - 1);
 
         int combinedSize = rows.getSizeInBytes() + lastPartition.getSizeInBytes();
-        if(combinedSize > THRESHOLD_SIZE) {
+        if (combinedSize > THRESHOLD_SIZE) {
             //create a new partition.
             lastPartition = newPartition(lastPartition.getPartitionNumber() + 1);
             partitions.add(lastPartition);
@@ -87,9 +92,9 @@ public class IndexerImpl implements IndexerSpec {
 
         SerializedBitmap srr = cacheMap.get(theKey); //serialized bitmap.
         Roaring64NavigableMap rr;
-        if(srr != null) rr = srr.toBitMap();
+        if (srr != null) rr = srr.toBitMap();
         else rr = Roaring64NavigableMap.bitmapOf();
-        log.info("Modifying / new RR : {}", rr);
+
         rr.or(rows);
         rr.runOptimize();
         SerializedBitmap resultSrr = SerializedBitmap.fromBitMap(rr);
@@ -101,7 +106,7 @@ public class IndexerImpl implements IndexerSpec {
     }
 
     private String key(DateTime startOfDay, String key, String val) {
-        return "d_"+ startOfDay.withTimeAtStartOfDay().toString() +"_p_"+ key+ "_v_" + val;
+        return "d_" + startOfDay.withTimeAtStartOfDay().toString() + "_p_" + key + "_v_" + val;
     }
 
     private DimensionPartitionMetaInfo newPartition(int pNum) {
@@ -124,9 +129,110 @@ public class IndexerImpl implements IndexerSpec {
 
     @Override
     public Map<DateTime, long[]> getRowIDs(Map<String, String> filters, Interval interval) {
-        return null;
+        //Need to get the dimension bitmaps for all filters.
+        //Since partitioned by day <= these can be ran in parallel; for multiple days.
+        //For a single day in the interval <= apply all filters and get row ids for that day.
+        List<IgniteFuture<FilterResult>> allFutures = Lists.newArrayList();
+        List<DateTime> days = Utils.getDays(interval);
+
+        Map<String, long[]> rowsInInterval = ti.getAllRowsInAnInterval(interval);
+
+        //can be parallel across days
+        for (DateTime day : days) {
+            try {
+                allFutures.add(
+                        getRowsIDsForADay(filters, day)
+                );
+            } catch (NoDataExistsException e) {
+                log.info("No data exists for : {}", day);
+            }
+        }
+
+        //once all calls are submitted, get all responses.
+        Map<DateTime, long[]> result = Maps.newHashMap();
+        allFutures.forEach(
+                f -> {
+                    try {
+                        FilterResult fr = f.get(100, TimeUnit.MILLISECONDS);
+                        Roaring64NavigableMap allFiltersForDay = fr.getRows().toBitMap();
+                        //one day
+                        long[] rows = rowsInInterval.get(fr.date().toString());
+                        Roaring64NavigableMap rowsToday = null;
+                        if(rows != null) {
+                            rowsToday = Roaring64NavigableMap.bitmapOf();
+                            for(long i=rows[0]; i<rows[1]; i++) rowsToday.addLong(i);
+                            rowsToday.runOptimize();
+                            allFiltersForDay.and(rowsToday);
+                        }
+                        else allFiltersForDay = Roaring64NavigableMap.bitmapOf();
+                        result.put(fr.date(), allFiltersForDay.toArray());
+                    } catch (Exception ex) {
+                        throw new RuntimeException("Cannot get all the results: ", ex);
+                    }
+                }
+        );
+        return result;
     }
 
+    private IgniteFuture<FilterResult> getRowsIDsForADay(Map<String, String> filters, DateTime day) throws NoDataExistsException {
+        /**
+         * TODO Retry before failing the feature.
+         */
+        List<List<String>> keys = keys(filters, day);
+        List<String> allKeys = keys.stream().flatMap(k -> k.stream()).collect(Collectors.toList()); //allKeys mixed
+        log.info("All Keys: {}", allKeys);
+        if(allKeys.size() == 0) throw new NoDataExistsException();
+        IgniteFuture<FilterResult> filterResult = ignite.compute().affinityCallAsync(INDEXER_CACHE, allKeys.get(0), (IgniteCallable<FilterResult>) () -> {
+
+            Roaring64NavigableMap result = keys.stream().map(
+                    partitionKeys -> { //union across all partition of the same k, v
+                        Map<String, SerializedBitmap> dimMap = cacheMap.getAll(Sets.newHashSet(partitionKeys));
+                        //union all dimMap
+                        Roaring64NavigableMap unionRR = Roaring64NavigableMap.bitmapOf();
+                        dimMap.forEach((k, v) -> unionRR.or(v.toBitMap()));
+                        return unionRR;
+                    })
+                    .reduce(null, (r, e) -> {
+                        if (r == null) return e;
+                        else {
+                            r.and(e);
+                            r.runOptimize();
+                            return r;
+                        }
+                    });
+
+            return new FilterResult(day.toString(), SerializedBitmap.fromBitMap(result));
+        });
+
+        return filterResult;
+    }
+
+    private List<List<String>> keys(Map<String, String> filters, DateTime day) {
+        Set<String> keys = Sets.newHashSet();
+        for (Map.Entry<String, String> filter : filters.entrySet()) {
+            keys.add(key(day.withTimeAtStartOfDay(), filter.getKey(), filter.getValue()));
+        }
+
+        //all dmKeys are in keys. <= time to get partitions.
+
+        Map<String, List<DimensionPartitionMetaInfo>> metaInfo = dmMap.getAll(keys);
+
+        List<List<String>> result = Lists.newArrayList();
+
+        metaInfo.forEach(
+                (k, v) -> result.add(addPartitions(k, v.size()))
+        );
+
+        return result;
+    }
+
+    private List<String> addPartitions(String key, int size) {
+        List<String> partitionKeys = Lists.newArrayList();
+        for (int i = 0; i < size; i++) {
+            partitionKeys.add(key + "_pn_" + i);
+        }
+        return partitionKeys;
+    }
 
 
     public static void main(String[] args) {
@@ -138,12 +244,13 @@ public class IndexerImpl implements IndexerSpec {
 
         Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
 
-        for(int i=0; i<10000; i++) {
+        for (int i = 0; i < 10000; i++) {
             rr.add(i);
 
             indexer.index(DateTime.now(), "test", "24", i);
         }
 
+        indexer.ti.storeAllRowsInAnInterval(new Interval("2018-11-22T00:00:00.000+05:30/P2D"), new long[] {0, 10000});
 
         indexer.dmMap.forEach(
                 e -> log.info("dmMap Entry: {}", e)
@@ -164,6 +271,10 @@ public class IndexerImpl implements IndexerSpec {
 //        }
 
         log.info("RR: {}", rr2.toBitMap());
+
+        Map<DateTime, long[]> rowIdMap = indexer.getRowIDs(ImmutableMap.of("test", "24"), new Interval("2018-11-21T00:00:00.000+05:30/P2D"));
+
+        log.info("rowIdMap: {}", Utils.toString(rowIdMap));
 
         server.getIgniteInstance().close();
     }
