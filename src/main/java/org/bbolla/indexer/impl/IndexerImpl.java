@@ -1,5 +1,6 @@
 package org.bbolla.indexer.impl;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -242,6 +243,8 @@ public class IndexerImpl implements IndexerSpec {
         TimeIndexerSpec ts = new TimeIndexerImpl(server);
         IndexerImpl indexer = new IndexerImpl(server, ts);
 
+        Stopwatch stopwatch = Stopwatch.createStarted();
+
         Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
 
         for (int i = 0; i < 10000; i++) {
@@ -275,6 +278,10 @@ public class IndexerImpl implements IndexerSpec {
         Map<DateTime, long[]> rowIdMap = indexer.getRowIDs(ImmutableMap.of("test", "24"), new Interval("2018-11-21T00:00:00.000+05:30/P2D"));
 
         log.info("rowIdMap: {}", Utils.toString(rowIdMap));
+
+        stopwatch.stop();
+
+        log.info("Time elapsed: {} ms", stopwatch.elapsed(TimeUnit.MILLISECONDS));
 
         server.getIgniteInstance().close();
     }
