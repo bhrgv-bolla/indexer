@@ -30,7 +30,7 @@ public class IndexerImpl implements IndexerSpec {
     private static final int THRESHOLD_SIZE = 1000000;
     private static final String DIMENSIONS_CACHE = "dimensions_cache";
     private Ignite ignite;
-    private IgniteCache<String, Roaring64NavigableMap> cacheMap;
+    private IgniteCache<String, SerializedBitmap> cacheMap;
     private IgniteCache<String, List<DimensionPartitionMetaInfo>> dmMap; //Dimension Meta Info Map.
     private TimeIndexerSpec ti;
 
@@ -77,16 +77,21 @@ public class IndexerImpl implements IndexerSpec {
 
 
         String theKey = key(startOfDay, key, val, lastPartition.getPartitionNumber());
+        String dmKey = key(startOfDay, key, val); //meta info key
 
-        Roaring64NavigableMap rr = cacheMap.get(theKey);
-        if(rr == null) rr = Roaring64NavigableMap.bitmapOf();
+        SerializedBitmap srr = cacheMap.get(theKey); //serialized bitmap.
+        Roaring64NavigableMap rr;
+        if(srr != null) rr = srr.toBitMap();
+        else rr = Roaring64NavigableMap.bitmapOf();
+        log.info("Modifying / new RR : {}", rr);
         rr.or(rows);
         rr.runOptimize();
-        lastPartition.setSizeInBytes(rr.getSizeInBytes());
+        SerializedBitmap resultSrr = SerializedBitmap.fromBitMap(rr);
+        lastPartition.setSizeInBytes(resultSrr.getSizeInBytes());
 
         //modify cache here.
-        dmMap.put(key(startOfDay, key, val), partitions);
-        cacheMap.put(theKey, rr);
+        dmMap.put(dmKey, partitions);
+        cacheMap.put(theKey, resultSrr);
     }
 
     private String key(DateTime startOfDay, String key, String val) {
@@ -119,6 +124,8 @@ public class IndexerImpl implements IndexerSpec {
 
 
     public static void main(String[] args) {
+
+
         Server server = new Server();
         TimeIndexerSpec ts = new TimeIndexerImpl(server);
         IndexerImpl indexer = new IndexerImpl(server, ts);
@@ -139,19 +146,18 @@ public class IndexerImpl implements IndexerSpec {
         indexer.cacheMap.forEach(
                 e -> {
                     log.info("cacheMap Entry : {}", e);
-                    log.info("results: {}", e.getValue().toArray());
+                    log.info("results: {}", e.getValue().toBitMap());
                 }
         );
 
-        Roaring64NavigableMap rr2 = indexer.cacheMap.get("d_2018-11-20T00:00:00.000-08:00_p_test_v_24_pn_0");
+        SerializedBitmap rr2 = indexer.cacheMap.get("d_2018-11-22T00:00:00.000+05:30_p_test_v_24_pn_0");
 
-        LongIterator iterator = rr2.getLongIterator();
 
 //        while(iterator.hasNext()) {
 //            log.info("{}", iterator.next());
 //        }
 
-        log.info("RR: {}", rr);
+        log.info("RR: {}", rr2.toBitMap());
 
         server.getIgniteInstance().close();
     }
