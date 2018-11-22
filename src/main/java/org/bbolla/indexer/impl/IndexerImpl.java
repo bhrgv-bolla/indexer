@@ -4,11 +4,11 @@ import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.configuration.CacheConfiguration;
 import org.bbolla.indexer.specification.IndexerSpec;
 import org.bbolla.indexer.specification.TimeIndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
-import org.roaringbitmap.longlong.LongIterator;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.Collections;
@@ -38,9 +38,13 @@ public class IndexerImpl implements IndexerSpec {
     private final static String INDEXER_CACHE = "indexer_cache";
 
     public IndexerImpl(Server server, TimeIndexerSpec ti) {
-        ignite = server.getIgniteInstance();
-        cacheMap = ignite.getOrCreateCache(INDEXER_CACHE);
         this.ti = ti;
+
+        ignite = server.getIgniteInstance();
+        CacheConfiguration config = new CacheConfiguration<String, SerializedBitmap>();
+        config.setAffinity(new CustomAffinityFunction());
+        config.setName(INDEXER_CACHE);
+        cacheMap = ignite.getOrCreateCache(config);
         dmMap = ignite.getOrCreateCache(DIMENSIONS_CACHE);
     }
 
