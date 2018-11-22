@@ -57,6 +57,8 @@ public class IndexerImpl implements IndexerSpec {
 
     @Override
     public void index(DateTime startOfDay, String key, String val, Roaring64NavigableMap rows) {
+        rows.runOptimize();
+
         startOfDay = startOfDay.withTimeAtStartOfDay();
         List<DimensionPartitionMetaInfo> partitions = dmMap.get(startOfDay.toString());
         if(partitions == null) {
