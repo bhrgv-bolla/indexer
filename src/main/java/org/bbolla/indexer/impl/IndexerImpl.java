@@ -8,7 +8,6 @@ import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
-import org.apache.ignite.cache.CachePeekMode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.lang.IgniteCallable;
 import org.apache.ignite.lang.IgniteFuture;
@@ -187,7 +186,7 @@ public class IndexerImpl implements IndexerSpec {
         if(allKeys.size() == 0) throw new NoDataExistsException();
         IgniteFuture<FilterResult> filterResult = ignite.compute().affinityCallAsync(INDEXER_CACHE, allKeys.get(0), (IgniteCallable<FilterResult>) () -> {
 
-            log.info("local entries: {}", cacheMap.localEntries(CachePeekMode.ALL));
+            log.info("local entries: {}", cacheMap.localMetrics());
 
             Roaring64NavigableMap result = keys.stream().map(
                     partitionKeys -> { //union across all partition of the same k, v
@@ -247,7 +246,6 @@ public class IndexerImpl implements IndexerSpec {
         TimeIndexerSpec ts = new TimeIndexerImpl(server);
         IndexerImpl indexer = new IndexerImpl(server, ts);
 
-        Stopwatch stopwatch = Stopwatch.createStarted();
 
         Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
 
@@ -272,11 +270,14 @@ public class IndexerImpl implements IndexerSpec {
         );
 
 
+        Stopwatch stopwatch = Stopwatch.createStarted();
         Map<DateTime, long[]> rowIdMap = indexer.getRowIDs(ImmutableMap.of("test", "24"), new Interval(DateTime.now().withTimeAtStartOfDay(), Period.days(3)));
+
+
+        stopwatch.stop();
 
         log.info("rowIdMap: {}", Utils.toString(rowIdMap));
 
-        stopwatch.stop();
 
         log.info("Time elapsed: {} ms", stopwatch.elapsed(TimeUnit.MILLISECONDS));
 
