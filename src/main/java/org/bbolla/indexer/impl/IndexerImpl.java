@@ -8,6 +8,7 @@ import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.cache.CachePeekMode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.lang.IgniteCallable;
 import org.apache.ignite.lang.IgniteFuture;
@@ -15,6 +16,7 @@ import org.bbolla.indexer.specification.IndexerSpec;
 import org.bbolla.indexer.specification.TimeIndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
+import org.joda.time.Period;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.*;
@@ -185,6 +187,8 @@ public class IndexerImpl implements IndexerSpec {
         if(allKeys.size() == 0) throw new NoDataExistsException();
         IgniteFuture<FilterResult> filterResult = ignite.compute().affinityCallAsync(INDEXER_CACHE, allKeys.get(0), (IgniteCallable<FilterResult>) () -> {
 
+            log.info("local entries: {}", cacheMap.localEntries(CachePeekMode.ALL));
+
             Roaring64NavigableMap result = keys.stream().map(
                     partitionKeys -> { //union across all partition of the same k, v
                         Map<String, SerializedBitmap> dimMap = cacheMap.getAll(Sets.newHashSet(partitionKeys));
@@ -249,11 +253,12 @@ public class IndexerImpl implements IndexerSpec {
 
         for (int i = 0; i < 10000; i++) {
             rr.add(i);
-
-            indexer.index(DateTime.now(), "test", "24", i);
         }
 
-        indexer.ti.storeAllRowsInAnInterval(new Interval("2018-11-22T00:00:00.000+05:30/P2D"), new long[] {0, 10000});
+
+        indexer.index(DateTime.now(), "test", "24", rr);
+
+        indexer.ti.storeAllRowsInAnInterval(new Interval(DateTime.now(), DateTime.now()), new long[] {0, 10000});
 
         indexer.dmMap.forEach(
                 e -> log.info("dmMap Entry: {}", e)
@@ -266,16 +271,8 @@ public class IndexerImpl implements IndexerSpec {
                 }
         );
 
-        SerializedBitmap rr2 = indexer.cacheMap.get("d_2018-11-22T00:00:00.000+05:30_p_test_v_24_pn_0");
 
-
-//        while(iterator.hasNext()) {
-//            log.info("{}", iterator.next());
-//        }
-
-        log.info("RR: {}", rr2.toBitMap());
-
-        Map<DateTime, long[]> rowIdMap = indexer.getRowIDs(ImmutableMap.of("test", "24"), new Interval("2018-11-21T00:00:00.000+05:30/P2D"));
+        Map<DateTime, long[]> rowIdMap = indexer.getRowIDs(ImmutableMap.of("test", "24"), new Interval(DateTime.now().withTimeAtStartOfDay(), Period.days(3)));
 
         log.info("rowIdMap: {}", Utils.toString(rowIdMap));
 
