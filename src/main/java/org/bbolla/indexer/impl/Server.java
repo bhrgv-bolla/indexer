@@ -11,7 +11,7 @@ public class Server {
         ignite = Ignition.start();
     }
 
-    Ignite getIgniteInstance() {
+    public Ignite getIgniteInstance() {
         return ignite;
     }
 

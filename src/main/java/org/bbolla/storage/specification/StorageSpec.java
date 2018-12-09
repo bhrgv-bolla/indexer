@@ -16,6 +16,6 @@ public interface StorageSpec {
         store(DateTime.now().withTimeAtStartOfDay(), rows);
     }
 
-    Map<Long, String> retrieveRows(Set<Long> rowIds);
+    Map<DateTime, Map<Long, String>> retrieveRows(DateTime date, Set<Long> rowIds);
 
 }
