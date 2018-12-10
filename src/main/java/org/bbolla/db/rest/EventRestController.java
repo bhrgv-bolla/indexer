@@ -3,6 +3,7 @@ package org.bbolla.db.rest;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.bbolla.db.indexer.specification.IndexerSpec;
+import org.bbolla.db.indexer.specification.TimeIndexerSpec;
 import org.bbolla.db.storage.specification.StorageSpec;
 import org.joda.time.DateTime;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,9 @@ public class EventRestController {
 
     @Autowired
     private StorageSpec storage;
+
+    @Autowired
+    private TimeIndexerSpec timeIndexer;
 
 
     @PostMapping("/submit/events")
@@ -73,6 +77,13 @@ public class EventRestController {
         );
 
         return ResponseEntity.ok(result);
+    }
+
+
+    @PostMapping("/read/allRowIdsInInterval")
+    public ResponseEntity<Object> getRowIdsInInterval(@RequestBody RowsRequest request) {
+        Map<String, long[]> rows = timeIndexer.getAllRowsInAnInterval(request.interval());
+        return ResponseEntity.ok(rows);
     }
 
 
