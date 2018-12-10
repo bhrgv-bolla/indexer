@@ -1,6 +1,6 @@
-package org.bbolla.indexer;
+package org.bbolla.db;
 
-import org.bbolla.indexer.specification.IndexerSpec;
+import org.bbolla.db.indexer.specification.IndexerSpec;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

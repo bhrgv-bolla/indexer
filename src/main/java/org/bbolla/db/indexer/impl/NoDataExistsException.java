@@ -1,4 +1,4 @@
-package org.bbolla.indexer.impl;
+package org.bbolla.db.indexer.impl;
 
 /**
  * @author bbolla on 11/22/18

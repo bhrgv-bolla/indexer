@@ -1,4 +1,4 @@
-package org.bbolla.indexer;
+package org.bbolla.db;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

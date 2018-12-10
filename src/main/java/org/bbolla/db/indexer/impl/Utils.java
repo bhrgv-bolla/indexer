@@ -1,4 +1,4 @@
-package org.bbolla.indexer.impl;
+package org.bbolla.db.indexer.impl;
 
 import com.google.common.collect.Lists;
 import org.joda.time.DateTime;

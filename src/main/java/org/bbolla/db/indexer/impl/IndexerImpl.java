@@ -1,4 +1,4 @@
-package org.bbolla.indexer.impl;
+package org.bbolla.db.indexer.impl;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
@@ -13,8 +13,8 @@ import org.apache.ignite.cache.CacheWriteSynchronizationMode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.lang.IgniteCallable;
 import org.apache.ignite.lang.IgniteFuture;
-import org.bbolla.indexer.specification.IndexerSpec;
-import org.bbolla.indexer.specification.TimeIndexerSpec;
+import org.bbolla.db.indexer.specification.IndexerSpec;
+import org.bbolla.db.indexer.specification.TimeIndexerSpec;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
 import org.joda.time.Period;
@@ -38,7 +38,15 @@ public class IndexerImpl implements IndexerSpec {
     private static final int THRESHOLD_SIZE = 1000000;
     private static final String DIMENSIONS_CACHE = "dimensions_cache";
     private Ignite ignite;
+
+    /*
+        Stores dim_val_partition bitmap.
+     */
     private IgniteCache<String, SerializedBitmap> cacheMap;
+
+    /*
+        Stores information about the number of partitions.
+     */
     private IgniteCache<String, List<DimensionPartitionMetaInfo>> dmMap; //Dimension Meta Info Map.
     private TimeIndexerSpec ti;
 
@@ -58,6 +66,7 @@ public class IndexerImpl implements IndexerSpec {
         config.setWriteSynchronizationMode(CacheWriteSynchronizationMode.FULL_SYNC);
 
         cacheMap = ignite.getOrCreateCache(config);
+
         dmMap = ignite.getOrCreateCache(DIMENSIONS_CACHE);
     }
 

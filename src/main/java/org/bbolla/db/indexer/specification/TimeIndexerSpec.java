@@ -1,4 +1,4 @@
-package org.bbolla.indexer.specification;
+package org.bbolla.db.indexer.specification;
 
 import org.joda.time.Interval;
 

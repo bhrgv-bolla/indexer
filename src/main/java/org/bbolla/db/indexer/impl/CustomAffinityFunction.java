@@ -1,4 +1,4 @@
-package org.bbolla.indexer.impl;
+package org.bbolla.db.indexer.impl;
 
 import org.apache.ignite.cache.affinity.rendezvous.RendezvousAffinityFunction;
 import org.joda.time.DateTime;

@@ -1,4 +1,4 @@
-package org.bbolla.indexer.impl;
+package org.bbolla.db.indexer.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.DateTime;

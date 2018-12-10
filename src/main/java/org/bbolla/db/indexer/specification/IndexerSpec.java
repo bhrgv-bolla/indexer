@@ -1,4 +1,4 @@
-package org.bbolla.indexer.specification;
+package org.bbolla.db.indexer.specification;
 
 import com.google.common.collect.Maps;
 import org.joda.time.DateTime;

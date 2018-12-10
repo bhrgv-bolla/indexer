@@ -1,7 +1,6 @@
-package org.bbolla.indexer.impl;
+package org.bbolla.db.indexer.impl;
 
 import org.apache.ignite.Ignite;
-import org.apache.ignite.IgniteCluster;
 import org.apache.ignite.Ignition;
 import org.apache.ignite.configuration.DataStorageConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;

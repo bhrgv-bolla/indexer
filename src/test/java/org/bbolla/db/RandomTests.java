@@ -1,4 +1,4 @@
-package org.bbolla.indexer;
+package org.bbolla.db;
 
 import com.opencsv.CSVWriterBuilder;
 import com.opencsv.ICSVWriter;

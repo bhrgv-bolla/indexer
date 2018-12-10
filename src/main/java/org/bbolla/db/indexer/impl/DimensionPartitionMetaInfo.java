@@ -1,4 +1,4 @@
-package org.bbolla.indexer.impl;
+package org.bbolla.db.indexer.impl;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

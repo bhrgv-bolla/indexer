@@ -1,4 +1,4 @@
-package org.bbolla.storage.specification;
+package org.bbolla.db.storage.specification;
 
 import org.joda.time.DateTime;
 
