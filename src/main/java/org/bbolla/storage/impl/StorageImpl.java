@@ -9,11 +9,18 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.cache.CacheMode;
+import org.apache.ignite.cache.CacheWriteSynchronizationMode;
+import org.apache.ignite.cache.affinity.AffinityKeyMapped;
+import org.apache.ignite.configuration.CacheConfiguration;
+import org.apache.ignite.internal.util.scala.impl;
+import org.bbolla.indexer.impl.SerializedBitmap;
 import org.bbolla.indexer.impl.Server;
 import org.bbolla.storage.specification.StorageSpec;
 import org.joda.time.DateTime;
 
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -32,6 +39,8 @@ public class StorageImpl implements StorageSpec {
     @NoArgsConstructor
     private static class RowKey {
         private long id;
+
+        @AffinityKeyMapped
         private String date;
 
         DateTime date() {
@@ -41,7 +50,16 @@ public class StorageImpl implements StorageSpec {
 
     StorageImpl(Ignite ignite) {
         this.ignite = ignite;
-        this.storage = ignite.getOrCreateCache("row_storage");
+
+
+        CacheConfiguration config = new CacheConfiguration<String, SerializedBitmap>();
+        config.setName("row_storage");
+        config.setCacheMode(CacheMode.PARTITIONED);
+        config.setBackups(2);
+        config.setReadFromBackup(true);
+        config.setWriteSynchronizationMode(CacheWriteSynchronizationMode.FULL_SYNC);
+
+        this.storage = ignite.getOrCreateCache(config);
     }
 
     @Override
@@ -82,10 +100,11 @@ public class StorageImpl implements StorageSpec {
 
     public static void main(String[] args) {
 
+        Random rand = new Random();
         Server server = new Server();
         StorageImpl impl = new StorageImpl(server.getIgniteInstance());
         Map<Long, String> rows = Maps.newHashMap();
-        rows.put(1L, "test");
+        rows.put(rand.nextLong(), "test");
 
         Stopwatch stopwatch = Stopwatch.createStarted();
         impl.store(DateTime.now(), rows);
@@ -95,6 +114,10 @@ public class StorageImpl implements StorageSpec {
 
         stopwatch.stop();
         log.info("result : {}; elapsed: {} ms", result, stopwatch.elapsed(TimeUnit.MILLISECONDS));
+
+        impl.storage.forEach(
+                e -> log.info("Entry: {}", e)
+        );
         impl.ignite.close();
     }
 }

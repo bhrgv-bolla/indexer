@@ -8,6 +8,8 @@ import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.cache.CacheMode;
+import org.apache.ignite.cache.CacheWriteSynchronizationMode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.lang.IgniteCallable;
 import org.apache.ignite.lang.IgniteFuture;
@@ -50,6 +52,11 @@ public class IndexerImpl implements IndexerSpec {
         CacheConfiguration config = new CacheConfiguration<String, SerializedBitmap>();
         config.setAffinity(new CustomAffinityFunction());
         config.setName(INDEXER_CACHE);
+        config.setCacheMode(CacheMode.PARTITIONED);
+        config.setBackups(2);
+        config.setReadFromBackup(true);
+        config.setWriteSynchronizationMode(CacheWriteSynchronizationMode.FULL_SYNC);
+
         cacheMap = ignite.getOrCreateCache(config);
         dmMap = ignite.getOrCreateCache(DIMENSIONS_CACHE);
     }
