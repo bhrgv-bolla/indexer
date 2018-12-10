@@ -16,6 +16,7 @@ import org.apache.ignite.configuration.CacheConfiguration;
 import org.bbolla.db.indexer.impl.SerializedBitmap;
 import org.bbolla.db.indexer.impl.Server;
 import org.bbolla.db.storage.specification.StorageSpec;
+import org.bbolla.db.utils.JsonUtils;
 import org.joda.time.DateTime;
 
 import java.util.Map;
@@ -31,7 +32,7 @@ public class StorageImpl implements StorageSpec {
 
     private Ignite ignite;
 
-    private final IgniteCache<RowKey, String> storage;
+    private final IgniteCache<String, String> storage;
 
     @Data
     @AllArgsConstructor
@@ -47,11 +48,11 @@ public class StorageImpl implements StorageSpec {
         }
     }
 
-    StorageImpl(Ignite ignite) {
+    public StorageImpl(Ignite ignite) {
         this.ignite = ignite;
 
 
-        CacheConfiguration config = new CacheConfiguration<String, SerializedBitmap>();
+        CacheConfiguration config = new CacheConfiguration<String, String>();
         config.setName("row_storage");
         config.setCacheMode(CacheMode.PARTITIONED);
         config.setBackups(2);
@@ -63,10 +64,10 @@ public class StorageImpl implements StorageSpec {
 
     @Override
     public void store(DateTime date, Map<Long, String> rows) {
-        Map<RowKey, String> newRows = Maps.newHashMap();
+        Map<String, String> newRows = Maps.newHashMap();
 
         rows.forEach(
-                (k, v) -> newRows.put(new RowKey(k, date.withTimeAtStartOfDay().toString()), v)
+                (k, v) -> newRows.put(JsonUtils.serialize(new RowKey(k, date.withTimeAtStartOfDay().toString())), v)
         );
 
         storage.putAll(newRows);
@@ -76,21 +77,22 @@ public class StorageImpl implements StorageSpec {
     public Map<DateTime, Map<Long, String>> retrieveRows(DateTime date, Set<Long> rowIds) {
         //TODO create keys
 
-        Set<RowKey> keys = Sets.newHashSet();
+        Set<String> keys = Sets.newHashSet();
 
         rowIds.forEach(
-                id -> keys.add(new RowKey(id, date.withTimeAtStartOfDay().toString()))
+                id -> keys.add(JsonUtils.serialize(new RowKey(id, date.withTimeAtStartOfDay().toString())))
         );
 
-        Map<RowKey, String> allRows = storage.getAll(keys);
+        Map<String, String> allRows = storage.getAll(keys);
 
         Map<DateTime, Map<Long, String>> rows = Maps.newHashMap();
 
         allRows.forEach(
                 (k, v) -> {
-                    DateTime key = k.date();
+                    RowKey rk = JsonUtils.deserialize(k, RowKey.class);
+                    DateTime key = rk.date();
                     if(! rows.containsKey(key)) rows.put(key, Maps.newHashMap());
-                    rows.get(key).put(k.getId(), v);
+                    rows.get(key).put(rk.getId(), v);
                 }
         );
 

@@ -1,5 +1,6 @@
 package org.bbolla.db.indexer.impl;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -15,7 +16,7 @@ import java.io.*;
 @NoArgsConstructor
 public class SerializedBitmap implements Serializable {
 
-    private byte[] serializedBitmap;
+    private byte[] bytes;
 
     public static SerializedBitmap fromBitMap(Roaring64NavigableMap rr) {
         try {
@@ -34,9 +35,9 @@ public class SerializedBitmap implements Serializable {
     public Roaring64NavigableMap toBitMap() {
         try {
             Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
-            if (this.serializedBitmap == null) return rr;
+            if (this.bytes == null) return rr;
             else {
-                rr.deserialize(new DataInputStream(new ByteArrayInputStream(this.serializedBitmap)));
+                rr.deserialize(new DataInputStream(new ByteArrayInputStream(this.bytes)));
                 return rr;
             }
         } catch (IOException ex) {
@@ -45,8 +46,9 @@ public class SerializedBitmap implements Serializable {
     }
 
 
-    public int getSizeInBytes() {
-        if(this.serializedBitmap == null) return 0;
-        else return this.serializedBitmap.length;
+    @JsonIgnore
+    public int sizeInBytes() {
+        if(this.bytes == null) return 0;
+        else return this.bytes.length;
     }
 }

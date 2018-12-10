@@ -42,7 +42,7 @@ public class IndexerImpl implements IndexerSpec {
     /*
         Stores dim_val_partition bitmap.
      */
-    private IgniteCache<String, SerializedBitmap> cacheMap;
+    private IgniteCache<String, byte[]> cacheMap;
 
     /*
         Stores information about the number of partitions.
@@ -57,7 +57,7 @@ public class IndexerImpl implements IndexerSpec {
         this.ti = ti;
 
         ignite = server.getIgniteInstance();
-        CacheConfiguration config = new CacheConfiguration<String, SerializedBitmap>();
+        CacheConfiguration config = new CacheConfiguration<String, byte[]>();
         config.setAffinity(new CustomAffinityFunction());
         config.setName(INDEXER_CACHE);
         config.setCacheMode(CacheMode.PARTITIONED);
@@ -108,7 +108,7 @@ public class IndexerImpl implements IndexerSpec {
         String theKey = key(startOfDay, key, val, lastPartition.getPartitionNumber());
         String dmKey = key(startOfDay, key, val); //meta info key
 
-        SerializedBitmap srr = cacheMap.get(theKey); //serialized bitmap.
+        SerializedBitmap srr = new SerializedBitmap(cacheMap.get(theKey)); //serialized bitmap.
         Roaring64NavigableMap rr;
         if (srr != null) rr = srr.toBitMap();
         else rr = Roaring64NavigableMap.bitmapOf();
@@ -116,11 +116,11 @@ public class IndexerImpl implements IndexerSpec {
         rr.or(rows);
         rr.runOptimize();
         SerializedBitmap resultSrr = SerializedBitmap.fromBitMap(rr);
-        lastPartition.setSizeInBytes(resultSrr.getSizeInBytes());
+        lastPartition.setSizeInBytes(resultSrr.sizeInBytes());
 
         //modify cache here.
         dmMap.put(dmKey, partitions);
-        cacheMap.put(theKey, resultSrr);
+        cacheMap.put(theKey, resultSrr.getBytes());
     }
 
     private String key(DateTime startOfDay, String key, String val) {
@@ -206,10 +206,19 @@ public class IndexerImpl implements IndexerSpec {
 
             Roaring64NavigableMap result = keys.stream().map(
                     partitionKeys -> { //union across all partition of the same k, v
-                        Map<String, SerializedBitmap> dimMap = cacheMap.getAll(Sets.newHashSet(partitionKeys));
+                        Map<String, byte[]> dimMap = Maps.newHashMap(cacheMap.getAll(Sets.newHashSet(partitionKeys)));
+
+                        log.info("All records : {}", dimMap);
+
                         //union all dimMap
                         Roaring64NavigableMap unionRR = Roaring64NavigableMap.bitmapOf();
-                        dimMap.forEach((k, v) -> unionRR.or(v.toBitMap()));
+
+                        for(Map.Entry<String, byte[]> e: dimMap.entrySet()) {
+                            SerializedBitmap sb = new SerializedBitmap(e.getValue());
+                            unionRR.or(sb.toBitMap());
+                        }
+
+
                         return unionRR;
                     })
                     .reduce(null, (r, e) -> {
@@ -281,7 +290,7 @@ public class IndexerImpl implements IndexerSpec {
         indexer.cacheMap.forEach(
                 e -> {
                     log.info("cacheMap Entry : {}", e);
-                    log.info("results: {}", e.getValue().toBitMap());
+                    log.info("results: {}", new SerializedBitmap(e.getValue()).toBitMap());
                 }
         );
 
