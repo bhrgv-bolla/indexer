@@ -13,7 +13,6 @@ import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.CacheWriteSynchronizationMode;
 import org.apache.ignite.cache.affinity.AffinityKeyMapped;
 import org.apache.ignite.configuration.CacheConfiguration;
-import org.bbolla.db.indexer.impl.SerializedBitmap;
 import org.bbolla.db.indexer.impl.Server;
 import org.bbolla.db.storage.specification.StorageSpec;
 import org.bbolla.db.utils.JsonUtils;
@@ -37,7 +36,7 @@ public class StorageImpl implements StorageSpec {
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
-    private static class RowKey {
+    static class RowKey {
         private long id;
 
         @AffinityKeyMapped
@@ -57,6 +56,7 @@ public class StorageImpl implements StorageSpec {
         config.setCacheMode(CacheMode.PARTITIONED);
         config.setBackups(2);
         config.setReadFromBackup(true);
+        config.setAffinity(new DayPartitionAffinityFunction());
         config.setWriteSynchronizationMode(CacheWriteSynchronizationMode.FULL_SYNC);
 
         this.storage = ignite.getOrCreateCache(config);
