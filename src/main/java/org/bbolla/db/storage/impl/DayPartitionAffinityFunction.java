@@ -1,7 +1,6 @@
 package org.bbolla.db.storage.impl;
 
 import org.apache.ignite.cache.affinity.rendezvous.RendezvousAffinityFunction;
-import org.bbolla.db.indexer.impl.CacheKeyUtils;
 import org.bbolla.db.utils.JsonUtils;
 import org.joda.time.DateTime;
 
