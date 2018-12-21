@@ -51,4 +51,5 @@ public class SerializedBitmap implements Serializable {
         if(this.bytes == null) return 0;
         else return this.bytes.length;
     }
+
 }

@@ -30,12 +30,14 @@ import java.util.stream.Collectors;
  * Push the past records to disk for later access.
  * Data Affinity => Place records of same timestamp in the same node.
  * Indexer can assume that index additions come less frequently than reads (Ex: 1 new index addition in a ~min; pre-aggregations take care of active indices.)
+ *
+ *
  */
 @Slf4j
 public class IndexerImpl implements IndexerSpec {
 
     //Maximum size.
-    private static final int THRESHOLD_SIZE = 1000000;
+    private static final int MAX_CACHE_PARTITION_SIZE_IN_BYTES = 10000000;
     private static final String DIMENSIONS_CACHE = "dimensions_cache";
     private Ignite ignite;
 
@@ -47,6 +49,10 @@ public class IndexerImpl implements IndexerSpec {
     /*
         Stores information about the number of partitions.
      */
+    //TODO could i use the meta info; to see if it is worth pulling that partition?
+    //TODO also if the time interval is less than a day <= we pull all the partitions?
+    //TODO could this be reduced by maintaining not max_cache but maintaining partitions buy rows(?)
+    //TODO dynamic partition size (storing the row ranges with the partition helps).
     private IgniteCache<String, List<DimensionPartitionMetaInfo>> dmMap; //Dimension Meta Info Map.
     private TimeIndexerSpec ti;
 
@@ -82,6 +88,7 @@ public class IndexerImpl implements IndexerSpec {
         return "d_" + today.withTimeAtStartOfDay().toString() + "_p_" + key + "_v_" + val + "_pn_" + partitionNumber;
     }
 
+    //TODO enable locking; let the use-case decide if locking is required; while using implementation.
     @Override
     public void index(DateTime startOfDay, String key, String val, Roaring64NavigableMap rows) {
         rows.runOptimize();
@@ -98,7 +105,7 @@ public class IndexerImpl implements IndexerSpec {
         DimensionPartitionMetaInfo lastPartition = partitions.get(partitions.size() - 1);
 
         int combinedSize = rows.getSizeInBytes() + lastPartition.getSizeInBytes();
-        if (combinedSize > THRESHOLD_SIZE) {
+        if (combinedSize > MAX_CACHE_PARTITION_SIZE_IN_BYTES) {
             //create a new partition.
             lastPartition = newPartition(lastPartition.getPartitionNumber() + 1);
             partitions.add(lastPartition);
@@ -171,7 +178,7 @@ public class IndexerImpl implements IndexerSpec {
         allFutures.forEach(
                 f -> {
                     try {
-                        FilterResult fr = f.get(100, TimeUnit.MILLISECONDS);
+                        FilterResult fr = f.get(100, TimeUnit.MILLISECONDS); //TODO get all futures in 100 millliseconds not each future in 100 milliseconds.
                         Roaring64NavigableMap allFiltersForDay = fr.getRows().toBitMap();
                         //one day
                         long[] rows = rowsInInterval.get(fr.date().toString());

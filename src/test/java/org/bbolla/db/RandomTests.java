@@ -1,11 +1,18 @@
 package org.bbolla.db;
 
+import com.google.common.base.Stopwatch;
 import com.opencsv.CSVWriterBuilder;
 import com.opencsv.ICSVWriter;
 import lombok.extern.slf4j.Slf4j;
+import org.bbolla.db.indexer.impl.SerializedBitmap;
 import org.junit.Test;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
+import org.xerial.snappy.Snappy;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -57,6 +64,29 @@ public class RandomTests {
             chars[i] = randChar();
         }
         return new String(chars);
+    }
+
+
+    @Test
+    public void testsCompression() throws IOException {
+        for(int i=1; i<=10000; i = i+4) {
+            testsCompression(i);
+        }
+    }
+
+    private void testsCompression(int interval) throws IOException {
+
+        Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
+        for(long i=0; i<25000000L; i++) {
+            if(i%interval ==0) rr.addLong(i);
+        }
+        rr.runOptimize();
+        SerializedBitmap sb = SerializedBitmap.fromBitMap(rr);
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        byte[] compressedSb = Snappy.compress(sb.getBytes());
+        stopwatch.stop();
+//        log.info("{} ms", stopwatch.elapsed(TimeUnit.MILLISECONDS));
+        log.info("Sparseness: {}, Cardinality: {}, Uncompressed Size: {}, Compressed size: {}, Compression Ratio: {}", interval, rr.getLongCardinality(), sb.sizeInBytes(),  compressedSb.length, (double) sb.sizeInBytes() /  compressedSb.length);
     }
 
     private char randChar() {
