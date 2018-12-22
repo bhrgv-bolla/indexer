@@ -22,6 +22,7 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
 
 /**
@@ -30,8 +31,6 @@ import java.util.stream.Collectors;
  * Push the past records to disk for later access.
  * Data Affinity => Place records of same timestamp in the same node.
  * Indexer can assume that index additions come less frequently than reads (Ex: 1 new index addition in a ~min; pre-aggregations take care of active indices.)
- *
- *
  */
 @Slf4j
 public class IndexerImpl implements IndexerSpec {
@@ -74,6 +73,7 @@ public class IndexerImpl implements IndexerSpec {
         cacheMap = ignite.getOrCreateCache(config);
 
         dmMap = ignite.getOrCreateCache(DIMENSIONS_CACHE);
+
     }
 
     /**
@@ -94,7 +94,9 @@ public class IndexerImpl implements IndexerSpec {
         rows.runOptimize();
 
         startOfDay = startOfDay.withTimeAtStartOfDay();
-        List<DimensionPartitionMetaInfo> partitions = dmMap.get(startOfDay.toString());
+        String dmKey = key(startOfDay, key, val); //meta info key
+
+        List<DimensionPartitionMetaInfo> partitions = dmMap.get(dmKey);
         if (partitions == null) {
             partitions = Lists.newArrayList();
         }
@@ -113,12 +115,11 @@ public class IndexerImpl implements IndexerSpec {
 
 
         String theKey = key(startOfDay, key, val, lastPartition.getPartitionNumber());
-        String dmKey = key(startOfDay, key, val); //meta info key
+
 
         SerializedBitmap srr = new SerializedBitmap(cacheMap.get(theKey)); //serialized bitmap.
-        Roaring64NavigableMap rr;
-        if (srr != null) rr = srr.toBitMap();
-        else rr = Roaring64NavigableMap.bitmapOf();
+        Roaring64NavigableMap rr = srr.toBitMap();
+
 
         rr.or(rows);
         rr.runOptimize();
@@ -145,6 +146,26 @@ public class IndexerImpl implements IndexerSpec {
     @Override
     public void index(DateTime startOfDay, String key, String val, long row) {
         index(startOfDay, key, val, Roaring64NavigableMap.bitmapOf(row));
+    }
+
+    private final String DELETE_KEY = "$delete", DELETE_VAL = "~set";
+
+    @Override
+    public void deleteRows(DateTime startOfDay, long[] rows) {
+        Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf(rows);
+        //Lock for delete.
+        String dmKey = key(startOfDay, DELETE_KEY, DELETE_VAL);
+        Lock dmLock = dmMap.lock(dmKey);
+
+        try {
+            dmLock.tryLock(200, TimeUnit.MILLISECONDS);
+            //index these
+            index(startOfDay, DELETE_KEY, DELETE_VAL, rr);
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Cannot acquire dm lock; delete failed", e);
+        } finally {
+            dmLock.unlock();
+        }
     }
 
     @Override
@@ -183,13 +204,12 @@ public class IndexerImpl implements IndexerSpec {
                         //one day
                         long[] rows = rowsInInterval.get(fr.date().toString());
                         Roaring64NavigableMap rowsToday = null;
-                        if(rows != null) {
+                        if (rows != null) {
                             rowsToday = Roaring64NavigableMap.bitmapOf();
-                            for(long i=rows[0]; i<rows[1]; i++) rowsToday.addLong(i);
+                            for (long i = rows[0]; i < rows[1]; i++) rowsToday.addLong(i);
                             rowsToday.runOptimize();
                             allFiltersForDay.and(rowsToday);
-                        }
-                        else allFiltersForDay = Roaring64NavigableMap.bitmapOf();
+                        } else allFiltersForDay = Roaring64NavigableMap.bitmapOf();
                         result.put(fr.date(), allFiltersForDay.toArray());
                     } catch (Exception ex) {
                         throw new RuntimeException("Cannot get all the results: ", ex);
@@ -199,6 +219,7 @@ public class IndexerImpl implements IndexerSpec {
         return result;
     }
 
+    //TODO add logic to use the delete set.
     private IgniteFuture<FilterResult> getRowsIDsForADay(Map<String, String> filters, DateTime day) throws NoDataExistsException {
         /**
          * TODO Retry before failing the feature.
@@ -206,7 +227,7 @@ public class IndexerImpl implements IndexerSpec {
         List<List<String>> keys = keys(filters, day);
         List<String> allKeys = keys.stream().flatMap(k -> k.stream()).collect(Collectors.toList()); //allKeys mixed
         log.info("All Keys: {}", allKeys);
-        if(allKeys.size() == 0) throw new NoDataExistsException();
+        if (allKeys.size() == 0) throw new NoDataExistsException();
         IgniteFuture<FilterResult> filterResult = ignite.compute().affinityCallAsync(INDEXER_CACHE, allKeys.get(0), (IgniteCallable<FilterResult>) () -> {
 
             log.info("local entries: {}", cacheMap.localMetrics());
@@ -220,7 +241,7 @@ public class IndexerImpl implements IndexerSpec {
                         //union all dimMap
                         Roaring64NavigableMap unionRR = Roaring64NavigableMap.bitmapOf();
 
-                        for(Map.Entry<String, byte[]> e: dimMap.entrySet()) {
+                        for (Map.Entry<String, byte[]> e : dimMap.entrySet()) {
                             SerializedBitmap sb = new SerializedBitmap(e.getValue());
                             unionRR.or(sb.toBitMap());
                         }
@@ -236,6 +257,9 @@ public class IndexerImpl implements IndexerSpec {
                             return r;
                         }
                     });
+
+            //TODO minus the delete set here.
+//            result.andNot(deleteRR);
 
             return new FilterResult(day.toString(), SerializedBitmap.fromBitMap(result));
         });
@@ -288,7 +312,7 @@ public class IndexerImpl implements IndexerSpec {
 
         indexer.index(DateTime.now(), "test", "24", rr);
 
-        indexer.ti.storeAllRowsInAnInterval(new Interval(DateTime.now(), DateTime.now()), new long[] {0, 10000});
+        indexer.ti.storeAllRowsInAnInterval(new Interval(DateTime.now(), DateTime.now()), new long[]{0, 10000});
 
         indexer.dmMap.forEach(
                 e -> log.info("dmMap Entry: {}", e)

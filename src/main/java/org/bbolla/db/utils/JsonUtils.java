@@ -1,7 +1,9 @@
 package org.bbolla.db.utils;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.joda.JodaModule;
 
 import java.io.IOException;
 
@@ -15,6 +17,7 @@ public class JsonUtils {
 
     static  {
         objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        objectMapper.registerModule(new JodaModule());
     }
 
 
@@ -40,5 +43,17 @@ public class JsonUtils {
         } catch (IOException e) {
             throw new RuntimeException("Deserialization Exception", e);
         }
+    }
+
+    public static <T> T deserialize(String input, TypeReference<T> toType) {
+        try {
+            return objectMapper.readValue(input, toType);
+        } catch (IOException e) {
+            throw new RuntimeException("Deserialization Exception", e);
+        }
+    }
+
+    public static ObjectMapper om() {
+        return objectMapper;
     }
 }

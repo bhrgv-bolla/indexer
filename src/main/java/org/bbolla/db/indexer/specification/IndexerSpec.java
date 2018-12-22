@@ -28,6 +28,13 @@ public interface IndexerSpec {
     void index(DateTime startOfDay, String key, String val, long row);
 
     /**
+     * Delete these rows; shouldn't be returned in response.
+     * @param startOfDay
+     * @param rows
+     */
+    void deleteRows(DateTime startOfDay, long[] rows);
+
+    /**
      * Inform the indexer that this row ids exist in
      * @param startTime
      * @param endTime
