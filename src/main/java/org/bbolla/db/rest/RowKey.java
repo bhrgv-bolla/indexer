@@ -13,7 +13,7 @@ import org.joda.time.DateTime;
 @Data
 public class RowKey extends JSONEnabled<RowKey> {
 
-    DateTime timestamp;
-    Long rowId;
+    private DateTime timestamp;
+    private Long rowId;
 
 }
