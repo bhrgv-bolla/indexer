@@ -4,6 +4,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.bbolla.db.indexer.specification.IndexerSpec;
 import org.bbolla.db.indexer.specification.TimeIndexerSpec;
 import org.bbolla.db.storage.specification.StorageSpec;
@@ -19,6 +21,7 @@ import java.util.stream.IntStream;
  * @author bbolla on 12/10/18
  */
 @RestController
+@Slf4j
 public class EventRestController {
 
 
@@ -158,9 +161,62 @@ public class EventRestController {
         } else { //records exist to serve.
             Map<DateTime, long[]> result = Maps.newHashMap();
             //lower bound; upper bound.
-            //
+            int remaining = pageSize;
+            int offset = pageNum * (pageSize - 1);// read from here.
+            for(int i=0; i<rowsInDays.length; i++) {
+                if(remaining == 0) break;
+
+                int rowsInCurrentDay = rowsInDays[i];
+                DateTime currentDate = dates.get(i);
+                long[] currentRows = rows.get(currentDate);
+                //sort desc / ascending; Cannot sort primitive arrays in descending order without converting to boxed type.
+                Arrays.sort(currentRows);
+
+                if(offset > rowsInCurrentDay) offset -= rowsInCurrentDay;
+                else if (offset + remaining <= rowsInCurrentDay) {
+                    long[] rowsInPage = select(offset, offset+remaining, currentRows, desc);
+                    result.put(currentDate, rowsInPage);
+                    remaining = 0;
+                    offset = 0;
+                } else { //offset + remaining is greater than current rows in the day. so partially, fulfill and move to the next day
+                    //update remaining and offset
+                    //Keep on reducing remaining
+                    int start = offset;
+                    int readUntil = rowsInCurrentDay;
+                    int recordsRead = readUntil - start;
+                    remaining = remaining - recordsRead;
+                    offset = 0;
+                    long[] rowsInPage = select(start, readUntil, currentRows, desc);
+                    result.put(currentDate, rowsInPage);
+                }
+            }
+
+            return result;
         }
 
+
+    }
+
+    private static long[] select(int startFrom, int readUntil, @NonNull long[] currentRows, boolean desc) {
+        int resultLength = readUntil - startFrom;
+        if(resultLength > currentRows.length) throw new IllegalArgumentException("result length cannot be greater than current rows length");
+        if(startFrom <0 || readUntil < 1) throw new IllegalArgumentException("cannot have -ve values for specifying range");
+        if(desc) { // read from the back.
+            long[] result = new long[resultLength];
+            int startIndex = currentRows.length - startFrom - 1;
+            int endIndex = currentRows.length - readUntil;
+            for(int i=startIndex, idx =0; i>=endIndex; i--, idx++) {
+                result[idx] = currentRows[i];
+            }
+            return result;
+        } else {
+            return Arrays.copyOfRange(currentRows, startFrom, readUntil);
+        }
+    }
+
+
+    public static void main(String[] args) {
+        log.info("result : {}" , Arrays.toString(select(0, 10, new long[] {2, 3, 4}, true)));
     }
 
 
