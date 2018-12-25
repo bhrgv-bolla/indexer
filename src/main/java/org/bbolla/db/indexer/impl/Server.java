@@ -8,6 +8,7 @@ import org.apache.ignite.configuration.IgniteConfiguration;
 
 //TODO start the server with ZOOKEEPER; base line topology.
 //TODO Seperate cluster maintenance functions like cluster active. change base line topology (etc)
+//TODO ***TOP PRIORITY*** topology management topology reports.
 @Slf4j
 public class Server {
 
