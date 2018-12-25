@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
  * Read and write row ranges in a time range.
  * Collect them back very fast. ~3 ms/ 4 ms.
  * TODO tests for edge cases.
+ * TODO create a new time index implementation with a treemap<Integer, Long>; in which the row provider.; Replicated store?? is not needed.
  */
 @Slf4j
 public class TimeIndexerImpl implements TimeIndexerSpec {

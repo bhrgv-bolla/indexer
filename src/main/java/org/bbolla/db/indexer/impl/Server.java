@@ -6,6 +6,8 @@ import org.apache.ignite.Ignition;
 import org.apache.ignite.configuration.DataStorageConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
 
+//TODO start the server with ZOOKEEPER; base line topology.
+//TODO Seperate cluster maintenance functions like cluster active. change base line topology (etc)
 @Slf4j
 public class Server {
 
