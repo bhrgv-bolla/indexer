@@ -220,36 +220,34 @@ public class IndexerImpl implements IndexerSpec {
     }
 
     //TODO add logic to use the delete set.
+    //TODO ***ENHANCEMENT*** pass the row ranges to only pull those keys
     private IgniteFuture<FilterResult> getRowsIDsForADay(Map<String, String> filters, DateTime day) throws NoDataExistsException {
         /**
          * TODO Retry before failing the feature.
          */
         List<List<String>> keys = keys(filters, day);
-        List<String> allKeys = keys.stream().flatMap(k -> k.stream()).collect(Collectors.toList()); //allKeys mixed
-        log.info("All Keys: {}", allKeys);
-        if (allKeys.size() == 0) throw new NoDataExistsException();
-        IgniteFuture<FilterResult> filterResult = ignite.compute().affinityCallAsync(INDEXER_CACHE, allKeys.get(0), (IgniteCallable<FilterResult>) () -> {
+        String sampleKeyForPartitionLookup = null; //Sample to tell ignite; where to run the block of code.
+
+
+        { //This block of code is to check atleast one key exists.
+            //TODO ***ENHANCEMENT*** if for a day atleast for one filter there are no rows; this means there is no data; since filters supported are AND today; no OR filters.
+            List<String> allKeys = keys.stream().flatMap(k -> k.stream()).collect(Collectors.toList()); //allKeys mixed
+            log.info("All Keys: {}", allKeys);
+            if (allKeys.size() == 0) throw new NoDataExistsException();
+            sampleKeyForPartitionLookup = allKeys.get(0);
+        }
+
+
+        //Runs this block closer to where data is stored.
+        IgniteFuture<FilterResult> filterResult = ignite.compute().affinityCallAsync(INDEXER_CACHE, sampleKeyForPartitionLookup, (IgniteCallable<FilterResult>) () -> {
 
             log.info("local entries: {}", cacheMap.localMetrics());
 
             Roaring64NavigableMap result = keys.stream().map(
-                    partitionKeys -> { //union across all partition of the same k, v
-                        Map<String, byte[]> dimMap = Maps.newHashMap(cacheMap.getAll(Sets.newHashSet(partitionKeys)));
-
-                        log.info("All records : {}", dimMap);
-
-                        //union all dimMap
-                        Roaring64NavigableMap unionRR = Roaring64NavigableMap.bitmapOf();
-
-                        for (Map.Entry<String, byte[]> e : dimMap.entrySet()) {
-                            SerializedBitmap sb = new SerializedBitmap(e.getValue());
-                            unionRR.or(sb.toBitMap());
-                        }
-
-
-                        return unionRR;
-                    })
-                    .reduce(null, (r, e) -> {
+                        //union across all partitions (if any) of the same index.
+                        partitionKeys -> unionBitsetsForGivenKeys(partitionKeys)
+                    )
+                    .reduce(null, (r, e) -> { //intersection b/w filters.
                         if (r == null) return e;
                         else {
                             r.and(e);
@@ -258,8 +256,9 @@ public class IndexerImpl implements IndexerSpec {
                         }
                     });
 
-            //TODO minus the delete set here.
-//            result.andNot(deleteRR);
+            //DELETE happen's here
+            Roaring64NavigableMap deleteSet = getDeleteSetForDay(day);
+            result.andNot(deleteSet); //and not is minus
 
             return new FilterResult(day.toString(), SerializedBitmap.fromBitMap(result));
         });
@@ -267,6 +266,40 @@ public class IndexerImpl implements IndexerSpec {
         return filterResult;
     }
 
+    private Roaring64NavigableMap unionBitsetsForGivenKeys(List<String> partitionKeys) {
+        Map<String, byte[]> dimMap = Maps.newHashMap(cacheMap.getAll(Sets.newHashSet(partitionKeys)));
+
+        //union all dimMap
+        Roaring64NavigableMap unionRR = Roaring64NavigableMap.bitmapOf();
+
+        for (Map.Entry<String, byte[]> e : dimMap.entrySet()) {
+            SerializedBitmap sb = new SerializedBitmap(e.getValue());
+            unionRR.or(sb.toBitMap());
+        }
+
+        return unionRR;
+    }
+
+    private Roaring64NavigableMap getDeleteSetForDay(DateTime day) {
+
+        List<List<String>> deleteSetPartitionKeys = keys(ImmutableMap.of(DELETE_KEY, DELETE_VAL), day);
+
+        //contains 0 or 1 List of keys.
+        if(deleteSetPartitionKeys.size() == 0) {
+            return Roaring64NavigableMap.bitmapOf();
+        } else {
+            if(deleteSetPartitionKeys.size() != 1) throw new IllegalStateException("Expecting only 1 element to exist in this list");
+             return unionBitsetsForGivenKeys(deleteSetPartitionKeys.get(0));
+        }
+    }
+
+    /**
+     * Pull all keys (for all partitions) the filters (k,v pairs) have in a day.
+     *
+     * @param filters
+     * @param day
+     * @return
+     */
     private List<List<String>> keys(Map<String, String> filters, DateTime day) {
         Set<String> keys = Sets.newHashSet();
         for (Map.Entry<String, String> filter : filters.entrySet()) {

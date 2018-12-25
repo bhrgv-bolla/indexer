@@ -32,6 +32,10 @@ public class SerializedBitmap implements Serializable {
         }
     }
 
+    public static SerializedBitmap empty() {
+        return new SerializedBitmap();
+    }
+
     public Roaring64NavigableMap toBitMap() {
         try {
             Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
