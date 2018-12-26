@@ -95,7 +95,7 @@ public class EventRestController {
     }
 
     @DeleteMapping("/delete/{rowKey}")
-    public ResponseEntity<Object> deleteRows(@RequestParam("rowKey") String row) {
+    public ResponseEntity<Object> deleteRows(@PathVariable("rowKey") String row) {
         RowKey rowKey = RowKey.fromJson(row);
         indexer.deleteRows(rowKey.getTimestamp(), new long[]{rowKey.getRowId()});
         return ResponseEntity.ok("Delete Successful");
@@ -109,7 +109,7 @@ public class EventRestController {
      * @return
      */
     @PutMapping("/update/{rowKey}")
-    public ResponseEntity<Object> updateRow(@RequestParam("rowKey") String key, @RequestBody String record) {
+    public ResponseEntity<Object> updateRow(@PathVariable("rowKey") String key, @RequestBody String record) {
         RowKey rowKey = RowKey.fromJson(key);
         storage.store(rowKey.getTimestamp(), ImmutableMap.of(rowKey.getRowId(), record));
         return ResponseEntity.ok("Success");
