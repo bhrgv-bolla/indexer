@@ -14,7 +14,6 @@ import org.apache.ignite.configuration.IgniteConfiguration;
 import org.apache.ignite.spi.discovery.zk.ZookeeperDiscoverySpi;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -85,6 +84,7 @@ public class Server {
      */
     public Object addNode(String nodeId) {
         ignite.cluster().currentBaselineTopology();
+        //TODO addNode
         throw new RuntimeException("Pending Implementation");
     }
 
@@ -113,7 +113,14 @@ public class Server {
         return clusterGroup.stream().map(n -> n.consistentId().toString()).collect(Collectors.toSet());
     }
 
+    //TODO remove Node
     public Object removeNode(String nodeId) {
+        throw new RuntimeException("yet to be implemented");
+    }
+
+    public Object rebalance(String[] consistendIds) {
+        //TODO throw exceptions if ndoes with those consistent ids doesn't exist.
+        //TODO add these consistent ids to the base line topology.
         throw new RuntimeException("yet to be implemented");
     }
 

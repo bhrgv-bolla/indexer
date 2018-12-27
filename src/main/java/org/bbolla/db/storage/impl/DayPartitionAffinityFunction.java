@@ -11,7 +11,7 @@ public class DayPartitionAffinityFunction extends RendezvousAffinityFunction {
 
     public DayPartitionAffinityFunction() {
         super();
-        setExcludeNeighbors(true); //TODO review
+        setExcludeNeighbors(true); //FIXME review
         setPartitions(366); //leap years; max days in an year; since doy is used for partitioning.
     }
 

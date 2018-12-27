@@ -75,8 +75,6 @@ public class StorageImpl implements StorageSpec {
 
     @Override
     public Map<DateTime, Map<Long, String>> retrieveRows(DateTime date, Set<Long> rowIds) {
-        //TODO create keys
-
         Set<String> keys = Sets.newHashSet();
 
         rowIds.forEach(
