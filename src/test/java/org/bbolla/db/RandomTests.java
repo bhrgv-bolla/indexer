@@ -15,8 +15,11 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author bbolla on 12/7/18
@@ -87,6 +90,37 @@ public class RandomTests {
         stopwatch.stop();
 //        log.info("{} ms", stopwatch.elapsed(TimeUnit.MILLISECONDS));
         log.info("Sparseness: {}, Cardinality: {}, Uncompressed Size: {}, Compressed size: {}, Compression Ratio: {}", interval, rr.getLongCardinality(), sb.sizeInBytes(),  compressedSb.length, (double) sb.sizeInBytes() /  compressedSb.length);
+    }
+
+
+    @Test
+    public void testsRawInsertionTime() {
+        Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        for(long i=0; i<3000000000L; i++) {
+            rr.addLong(i);
+        }
+        stopwatch.stop();
+        long elapsed = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+        log.info("Raw insertion time for 3 Billion records: {} ms, at a rate of: {} records/sec", elapsed, 3000000000L / (elapsed / 1000));
+    }
+
+
+    @Test
+    public void testReadTimes() throws IOException {
+        int fileSize = 3;
+        //write 20 mb file.
+        byte[] contents = new byte[fileSize * 1000 * 1000];
+        Arrays.fill(contents, (byte) 'a');
+        Files.write(Paths.get("temp"), contents, StandardOpenOption.TRUNCATE_EXISTING);
+        //read 20 mb file.
+
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        Files.readAllBytes(Paths.get("temp"));
+        stopwatch.stop();
+        //check it takes less than <10 ms.
+
+        log.info("{} mb Raw file io time : {} ms", fileSize, stopwatch.elapsed(TimeUnit.MILLISECONDS));
     }
 
     private char randChar() {
