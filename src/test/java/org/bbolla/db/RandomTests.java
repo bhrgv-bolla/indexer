@@ -6,6 +6,7 @@ import com.opencsv.ICSVWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.bbolla.db.indexer.impl.SerializedBitmap;
 import org.junit.Test;
+import org.roaringbitmap.RoaringBitmap;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 import org.xerial.snappy.Snappy;
 
@@ -37,8 +38,8 @@ public class RandomTests {
         StringWriter records = new StringWriter();
         PrintWriter printWriter = new PrintWriter(records);
         ICSVWriter icsvWriter = new CSVWriterBuilder(printWriter).build();
-        for(int i=1; i<=PAGE_SIZE; i++) {
-            icsvWriter.writeNext(new String[] {String.valueOf(i), fakeRecord()});
+        for (int i = 1; i <= PAGE_SIZE; i++) {
+            icsvWriter.writeNext(new String[]{String.valueOf(i), fakeRecord()});
         }
         log.info("Sample records: \n{}", records.toString().substring(0, 100));
 
@@ -63,7 +64,7 @@ public class RandomTests {
 
     private String randomChars(int bytes) {
         char[] chars = new char[bytes];
-        for(int i=0; i<bytes; i++) {
+        for (int i = 0; i < bytes; i++) {
             chars[i] = randChar();
         }
         return new String(chars);
@@ -72,7 +73,7 @@ public class RandomTests {
 
     @Test
     public void testsCompression() throws IOException {
-        for(int i=1; i<=10000; i = i+4) {
+        for (int i = 1; i <= 10000; i = i + 4) {
             testsCompression(i);
         }
     }
@@ -80,8 +81,8 @@ public class RandomTests {
     private void testsCompression(int interval) throws IOException {
 
         Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
-        for(long i=0; i<25000000L; i++) {
-            if(i%interval ==0) rr.addLong(i);
+        for (long i = 0; i < 25000000L; i++) {
+            if (i % interval == 0) rr.addLong(i);
         }
         rr.runOptimize();
         SerializedBitmap sb = SerializedBitmap.fromBitMap(rr);
@@ -89,20 +90,40 @@ public class RandomTests {
         byte[] compressedSb = Snappy.compress(sb.getBytes());
         stopwatch.stop();
 //        log.info("{} ms", stopwatch.elapsed(TimeUnit.MILLISECONDS));
-        log.info("Sparseness: {}, Cardinality: {}, Uncompressed Size: {}, Compressed size: {}, Compression Ratio: {}", interval, rr.getLongCardinality(), sb.sizeInBytes(),  compressedSb.length, (double) sb.sizeInBytes() /  compressedSb.length);
+        log.info("Sparseness: {}, Cardinality: {}, Uncompressed Size: {}, Compressed size: {}, Compression Ratio: {}", interval, rr.getLongCardinality(), sb.sizeInBytes(), compressedSb.length, (double) sb.sizeInBytes() / compressedSb.length);
     }
 
 
     @Test
-    public void testsRawInsertionTime() {
+    public void testsRawInsertionTime() throws IOException {
+        long total = 3000000L;
         Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
+        byte[] sb = SerializedBitmap.toByteArray(rr);
         Stopwatch stopwatch = Stopwatch.createStarted();
-        for(long i=0; i<3000000000L; i++) {
+        for (long i = 0; i < total; i++) { //19:44:05.507 [main] INFO org.bbolla.db.RandomTests - Raw insertion time for 3 Billion records: 25005 ms, at a rate of: 120000000 records/sec
+            rr = SerializedBitmap.toBitMap(sb); //simulating the serializing and deserializing.
             rr.addLong(i);
+            sb = SerializedBitmap.toByteArray(rr);
         }
         stopwatch.stop();
         long elapsed = stopwatch.elapsed(TimeUnit.MILLISECONDS);
-        log.info("Raw insertion time for 3 Billion records: {} ms, at a rate of: {} records/sec", elapsed, 3000000000L / (elapsed / 1000));
+        log.info("Raw insertion time for 3 Billion records: {} ms, at a rate of: {} records/sec", elapsed, total / (elapsed / 1000));
+    }
+
+    @Test
+    public void testsRawInsertionTimeRoaring() throws IOException {
+        long total = 2000000L;
+        RoaringBitmap rr = RoaringBitmap.bitmapOf();
+        byte[] sb = SerializedBitmap.toByteArray(rr);
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        for (int i = 0; i < total; i++) { //19:44:05.507 [main] INFO org.bbolla.db.RandomTests - Raw insertion time for 3 Billion records: 25005 ms, at a rate of: 120000000 records/sec
+            rr = SerializedBitmap.toRoaringBitMap(sb); //simulating the serializing and deserializing.
+            if (i % 5 == 0) rr.add(i);
+            sb = SerializedBitmap.toByteArray(rr);
+        }
+        stopwatch.stop();
+        long elapsed = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+        log.info("Raw insertion time for {} records: {} ms, at a rate of: {} records/sec; size: {} bytes", total, elapsed, total / (elapsed / 1000), sb.length);
     }
 
 
