@@ -4,6 +4,15 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
+/**
+ * TODO
+ *  1. Better Timer Indexer Impl.
+ *  2. If the whole cluster should fail; how will the cluster be rebuilt from the backing store.
+ *  3. How would across dc replication happen.
+ *  4. How would you check point what is written and what is not written before failure. If need be; how would you replay.
+ *  5. How would you decide what data is lost; what data needs to be replayed.
+ *  6. Is this system idempotent??
+ */
 @EnableSwagger2
 @SpringBootApplication
 public class EventIndexerApplication {
