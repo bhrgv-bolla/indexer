@@ -100,14 +100,31 @@ public class RandomTests {
         Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
         byte[] sb = SerializedBitmap.toByteArray(rr);
         Stopwatch stopwatch = Stopwatch.createStarted();
-        for (long i = 0; i < total; i++) { //19:44:05.507 [main] INFO org.bbolla.db.RandomTests - Raw insertion time for 3 Billion records: 25005 ms, at a rate of: 120000000 records/sec
+        for (long i = 0; i < total; i++) {
             rr = SerializedBitmap.toBitMap(sb); //simulating the serializing and deserializing.
-            rr.addLong(i);
+            if (i % 5 == 0) rr.addLong(i);
             sb = SerializedBitmap.toByteArray(rr);
         }
         stopwatch.stop();
         long elapsed = stopwatch.elapsed(TimeUnit.MILLISECONDS);
-        log.info("Raw insertion time for 3 Billion records: {} ms, at a rate of: {} records/sec", elapsed, total / (elapsed / 1000));
+        log.info("Raw insertion time for {} records: {} ms, at a rate of: {} records/sec", total, elapsed, total / (elapsed / 1000));
+    }
+
+
+    @Test
+    public void testsSerDeTime() throws IOException {
+        Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
+        for(long i=0; i<500000; i++) {
+            if(i % 5 ==0) rr.addLong(i);
+        }
+
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        byte[] o = SerializedBitmap.toByteArray(rr);
+        SerializedBitmap.toBitMap(o);
+
+        stopwatch.stop();
+
+        log.info("SerDe time : {} ms", stopwatch.elapsed(TimeUnit.MILLISECONDS));
     }
 
     @Test
