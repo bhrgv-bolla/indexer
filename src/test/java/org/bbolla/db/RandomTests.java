@@ -112,6 +112,24 @@ public class RandomTests {
 
 
     @Test
+    public void testsRawBatchInsertionTime() throws IOException {
+        long total = 100_000_000L;
+        Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
+        byte[] sb = SerializedBitmap.toByteArray(rr);
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        for (long i = 0; i < total; i++) {
+            rr = SerializedBitmap.toBitMap(sb); //simulating the serializing and deserializing.
+            for(long j=0 ; i<total && j<100000; j++, i++) if (i % 5 == 0) rr.addLong(i); //batching.
+            sb = SerializedBitmap.toByteArray(rr);
+        }
+        stopwatch.stop();
+        long elapsed = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+        log.info("Raw insertion time for {} records: {} ms, at a rate of: {} records/sec", total, elapsed, (long) (total / ((double) elapsed / 1000)));
+    }
+
+
+
+    @Test
     public void testsSerDeTime() throws IOException {
         Roaring64NavigableMap rr = Roaring64NavigableMap.bitmapOf();
         for(long i=0; i<500000; i++) {
