@@ -88,7 +88,7 @@ public class IndexerImpl implements IndexerSpec {
         return "d_" + today.withTimeAtStartOfDay().toString() + "_p_" + key + "_v_" + val + "_pn_" + partitionNumber;
     }
 
-    //TODO enable locking; let the use-case decide if locking is required; while using implementation.
+    //TODO ***URGENT*** enable locking; let the use-case decide if locking is required; while using implementation.
     @Override
     public void index(DateTime startOfDay, String key, String val, Roaring64NavigableMap rows) {
         rows.runOptimize();
@@ -100,6 +100,8 @@ public class IndexerImpl implements IndexerSpec {
         if (partitions == null) {
             partitions = Lists.newArrayList();
         }
+
+
         //sort all partitions.
         Collections.sort(partitions, Comparator.comparingInt(DimensionPartitionMetaInfo::getPartitionNumber));
         if (partitions.size() == 0) partitions.add(newPartition(0));
@@ -114,10 +116,10 @@ public class IndexerImpl implements IndexerSpec {
         }
 
 
-        String theKey = key(startOfDay, key, val, lastPartition.getPartitionNumber());
+        String cacheKey = key(startOfDay, key, val, lastPartition.getPartitionNumber());
 
 
-        SerializedBitmap srr = new SerializedBitmap(cacheMap.get(theKey)); //serialized bitmap.
+        SerializedBitmap srr = new SerializedBitmap(cacheMap.get(cacheKey)); //serialized bitmap.
         Roaring64NavigableMap rr = srr.toBitMap();
 
 
@@ -128,7 +130,7 @@ public class IndexerImpl implements IndexerSpec {
 
         //modify cache here.
         dmMap.put(dmKey, partitions);
-        cacheMap.put(theKey, resultSrr.getBytes());
+        cacheMap.put(cacheKey, resultSrr.getBytes());
     }
 
     private String key(DateTime startOfDay, String key, String val) {
@@ -219,8 +221,7 @@ public class IndexerImpl implements IndexerSpec {
         return result;
     }
 
-    //TODO add logic to use the delete set.
-    //TODO ***ENHANCEMENT*** pass the row ranges to only pull those keys
+    //TODO ***ENHANCEMENT*** ***URGENT*** pass the row ranges to only pull those keys
     private IgniteFuture<FilterResult> getRowsIDsForADay(Map<String, String> filters, DateTime day) throws NoDataExistsException {
         /**
          * TODO Retry before failing the feature.

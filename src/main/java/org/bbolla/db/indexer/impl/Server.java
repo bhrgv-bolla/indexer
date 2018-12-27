@@ -17,8 +17,6 @@ import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-//TODO Seperate cluster maintenance functions like cluster active. change base line topology (etc)
-//TODO ***TOP PRIORITY*** topology management topology reports.
 @Slf4j
 public class Server {
 

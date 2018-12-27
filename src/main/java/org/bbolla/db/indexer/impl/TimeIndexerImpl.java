@@ -32,7 +32,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
 
 
     public TimeIndexerImpl(Server server) {
-        //TODO configure native persistence for time indexer.
+        //TODO ***URGENT*** configure native persistence for time indexer.
         Ignite ignite = server.getIgniteInstance();
         this.trMap = ignite.getOrCreateCache(TIME_INDEXER_CACHE);
         this.dateKeys = ignite.getOrCreateCache(DATE_KEYS_CACHE);

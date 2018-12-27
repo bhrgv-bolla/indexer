@@ -149,11 +149,11 @@ public class EventRestController {
         return ResponseEntity.ok(result);
     }
 
-    //TODO add endpoint for updating / adding an index. (maintainence endpoints; not for consumer)
+    //TODO ***URGENT*** add endpoint for updating / adding an index. (maintainence endpoints; not for consumer)
 
-    //TODO for reporting row ranges (time indexer).
+    //TODO ***URGENT*** for reporting row ranges (time indexer).
 
-    //TODO add endpoint for adding a new record(s).
+    //TODO ***URGENT*** add endpoint for adding a new record(s).
 
     private static Map<DateTime, long[]> filterRowsInPage(Map<DateTime, long[]> rows, int pageNum, int pageSize, boolean desc) {
         List<DateTime> dates = Lists.newArrayList(rows.keySet());
