@@ -140,6 +140,13 @@
             <version>2.6.7</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.ignite/ignite-zookeeper -->
+        <dependency>
+            <groupId>org.apache.ignite</groupId>
+            <artifactId>ignite-zookeeper</artifactId>
+            <version>${ignite.version}</version>
+        </dependency>
+
 
     </dependencies>
 

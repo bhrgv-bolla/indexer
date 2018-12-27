@@ -9,11 +9,18 @@ import org.bbolla.db.indexer.specification.TimeIndexerSpec;
 import org.bbolla.db.storage.impl.StorageImpl;
 import org.bbolla.db.storage.specification.StorageSpec;
 import org.bbolla.db.utils.JsonUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class EventIndexerConfig {
+
+    @Value("${zookeeper.hosts}")
+    private String zkHosts;
+
+    @Value("${zookeeper.root}")
+    private String zkRootPath;
 
     @Bean
     public ObjectMapper om() {
@@ -22,7 +29,7 @@ public class EventIndexerConfig {
 
     @Bean
     public Server server() {
-        return new Server();
+        return new Server(zkHosts, zkRootPath);
     }
 
     @Bean
