@@ -58,6 +58,8 @@ public class Server {
 
         ignite = Ignition.start(cfg);
 
+        activate(); //FIXME needed to call this; if not the componenets fail while applicaiton starting.
+
         log.warn("Storage directory set to : {}", cfg.getDataStorageConfiguration().getDefaultDataRegionConfiguration());
     }
 
