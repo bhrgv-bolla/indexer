@@ -133,6 +133,11 @@ public class IndexerImpl implements IndexerSpec {
         SerializedBitmap resultSrr = SerializedBitmap.fromBitMap(rr);
         lastPartition.setSizeInBytes(resultSrr.sizeInBytes());
 
+        /*
+            Set the range of lastPartition.
+         */
+        lastPartition.adjustRange(rows);
+
         //modify cache here.
         dmMap.put(dmKey, partitions);
         cacheMap.put(cacheKey, resultSrr.getBytes());
@@ -181,7 +186,7 @@ public class IndexerImpl implements IndexerSpec {
     }
 
     @Override
-    public Map<DateTime, long[]> getRowIDs(Map<String, String> filters, Interval interval) {
+    public Map<DateTime, long[]> getRowIDs(Map<String, String> filters, Interval interval) { //TODO can take an offset here.
         //Need to get the dimension bitmaps for all filters.
         //Since partitioned by day <= these can be ran in parallel; for multiple days.
         //For a single day in the interval <= apply all filters and get row ids for that day.
@@ -193,8 +198,9 @@ public class IndexerImpl implements IndexerSpec {
         //can be parallel across days
         for (DateTime day : days) {
             try {
+                long[] dayRange = rowsInInterval.get(day.toString());
                 allFutures.add(
-                        getRowsIDsForADay(filters, day)
+                        getRowsIDsForADay(filters, day, dayRange[0], dayRange[1])
                 );
             } catch (NoDataExistsException e) {
                 log.info("No data exists for : {}", day);
@@ -227,11 +233,11 @@ public class IndexerImpl implements IndexerSpec {
     }
 
     //TODO ***ENHANCEMENT*** ***URGENT*** pass the row ranges to only pull those keys
-    private IgniteFuture<FilterResult> getRowsIDsForADay(Map<String, String> filters, DateTime day) throws NoDataExistsException {
+    private IgniteFuture<FilterResult> getRowsIDsForADay(Map<String, String> filters, DateTime day, long start, long endExclusive) throws NoDataExistsException {
         /**
          * TODO ***FAILURE RESILENT (KINDA URGENT)*** Retry before failing the feature.
          */
-        List<List<String>> keys = keys(filters, day);
+        List<List<String>> keys = keys(filters, day, start, endExclusive);
         String sampleKeyForPartitionLookup = null; //Sample to tell ignite; where to run the block of code.
 
 
@@ -250,9 +256,9 @@ public class IndexerImpl implements IndexerSpec {
             log.info("local entries: {}", cacheMap.localMetrics());
 
             Roaring64NavigableMap result = keys.stream().map(
-                        //union across all partitions (if any) of the same index.
-                        partitionKeys -> unionBitsetsForGivenKeys(partitionKeys)
-                    )
+                    //union across all partitions (if any) of the same index.
+                    partitionKeys -> unionBitsetsForGivenKeys(partitionKeys)
+            )
                     .reduce(null, (r, e) -> { //intersection b/w filters.
                         if (r == null) return e;
                         else {
@@ -263,7 +269,7 @@ public class IndexerImpl implements IndexerSpec {
                     });
 
             //DELETE happen's here
-            Roaring64NavigableMap deleteSet = getDeleteSetForDay(day);
+            Roaring64NavigableMap deleteSet = getDeleteSetForDay(day, start, endExclusive);
             result.andNot(deleteSet); //and not is minus
 
             return new FilterResult(day.toString(), SerializedBitmap.fromBitMap(result));
@@ -286,16 +292,17 @@ public class IndexerImpl implements IndexerSpec {
         return unionRR;
     }
 
-    private Roaring64NavigableMap getDeleteSetForDay(DateTime day) {
+    private Roaring64NavigableMap getDeleteSetForDay(DateTime day, long start, long endExclusive) {
 
-        List<List<String>> deleteSetPartitionKeys = keys(ImmutableMap.of(DELETE_KEY, DELETE_VAL), day);
+        List<List<String>> deleteSetPartitionKeys = keys(ImmutableMap.of(DELETE_KEY, DELETE_VAL), day, start, endExclusive);
 
         //contains 0 or 1 List of keys.
-        if(deleteSetPartitionKeys.size() == 0) {
+        if (deleteSetPartitionKeys.size() == 0) {
             return Roaring64NavigableMap.bitmapOf();
         } else {
-            if(deleteSetPartitionKeys.size() != 1) throw new IllegalStateException("Expecting only 1 element to exist in this list");
-             return unionBitsetsForGivenKeys(deleteSetPartitionKeys.get(0));
+            if (deleteSetPartitionKeys.size() != 1)
+                throw new IllegalStateException("Expecting only 1 element to exist in this list");
+            return unionBitsetsForGivenKeys(deleteSetPartitionKeys.get(0));
         }
     }
 
@@ -304,9 +311,11 @@ public class IndexerImpl implements IndexerSpec {
      *
      * @param filters
      * @param day
+     * @param startInclusive
+     * @param endExclusive
      * @return
      */
-    private List<List<String>> keys(Map<String, String> filters, DateTime day) {
+    private List<List<String>> keys(Map<String, String> filters, DateTime day, long startInclusive, long endExclusive) {
         Set<String> keys = Sets.newHashSet();
         for (Map.Entry<String, String> filter : filters.entrySet()) {
             keys.add(key(day.withTimeAtStartOfDay(), filter.getKey(), filter.getValue()));
@@ -319,12 +328,29 @@ public class IndexerImpl implements IndexerSpec {
         List<List<String>> result = Lists.newArrayList();
 
         metaInfo.forEach(
-                (k, v) -> result.add(addPartitions(k, v.size()))
+                (k, v) -> {
+                    List<String> partitionKeysForDimension = Lists.newArrayList();
+                    //See if the needs to be added.
+                    for (DimensionPartitionMetaInfo dpm : v) {
+                        if (contains(dpm, startInclusive, endExclusive)) {
+                            partitionKeysForDimension.add(k + "_pn_" + dpm.getPartitionNumber());
+                        }
+                    }
+                    result.add(partitionKeysForDimension);
+                }
         );
 
         return result;
     }
 
+    private boolean contains(DimensionPartitionMetaInfo dpm, long startInclusive, long endExclusive) {
+        long[] rowRange = dpm.getRange();
+        //If there is an overlap; then we need to pull the partition.
+        //X < B AND A < Y
+        return (startInclusive < rowRange[1]) && (rowRange[0] < endExclusive);
+    }
+
+    //TODO ***CLEANUP *** DELETE IF UNUSED,
     private List<String> addPartitions(String key, int size) {
         List<String> partitionKeys = Lists.newArrayList();
         for (int i = 0; i < size; i++) {
