@@ -43,11 +43,11 @@ public class Server {
 
         zkDiscoSpi.setZkConnectionString(zookeeperHosts);
 
-        zkDiscoSpi.setSessionTimeout(30000);
+        zkDiscoSpi.setSessionTimeout(30_000);
 
         zkDiscoSpi.setZkRootPath(zkRootPath);
 
-        zkDiscoSpi.setJoinTimeout(10_000); //TODO ability to manage these settings from outside??
+        zkDiscoSpi.setJoinTimeout(10_000); //TODO ***NOT URGENT*** ability to manage these settings from outside??
 
         cfg.setDiscoverySpi(zkDiscoSpi);
         //end SPI
@@ -58,7 +58,9 @@ public class Server {
 
         ignite = Ignition.start(cfg);
 
-        activate(); //FIXME needed to call this; if not the componenets fail while applicaiton starting.
+        activate();
+        /*FIXME ****VERY IMMEDIATE***  needed to call this; if not the componenets fail while applicaiton starting.
+             One other way to get around this is to start the whole cluster; rebalance for setting the base topology. */
 
         log.warn("Storage directory set to : {}", cfg.getDataStorageConfiguration().getDefaultDataRegionConfiguration());
     }
@@ -84,7 +86,7 @@ public class Server {
      */
     public Object addNode(String nodeId) {
         ignite.cluster().currentBaselineTopology();
-        //TODO addNode
+        //TODO ***NOT IMMEDIATE** addNode
         throw new RuntimeException("Pending Implementation");
     }
 
@@ -113,14 +115,14 @@ public class Server {
         return clusterGroup.stream().map(n -> n.consistentId().toString()).collect(Collectors.toSet());
     }
 
-    //TODO remove Node
+    //TODO ***NOT IMMEDIATE *** remove Node
     public Object removeNode(String nodeId) {
         throw new RuntimeException("yet to be implemented");
     }
 
     public Object rebalance(String[] consistendIds) {
-        //TODO throw exceptions if ndoes with those consistent ids doesn't exist.
-        //TODO add these consistent ids to the base line topology.
+        /*TODO *** NOT IMMEDIATE *** throw exceptions if ndoes with those consistent ids doesn't exist.
+             add these consistent ids to the base line topology.*/
         throw new RuntimeException("yet to be implemented");
     }
 
@@ -133,17 +135,20 @@ public class Server {
         String type;
         String hostname;
         String order;
+        Boolean baselineTopology;
     }
 
 
     public Object nodes() {
+        Set<String> baseline = ids(ignite.cluster().currentBaselineTopology());
         return ignite.cluster().nodes().stream().map(c -> {
             Node n = new Node();
             n.setId(c.consistentId().toString());
             n.setIp(c.addresses().toString());
             n.setHostname(c.hostNames().toString());
             n.setOrder(String.valueOf(c.order()));
-            n.setType(c.isClient()? "client": "server"); //TODO only two types for now. Review later.
+            n.setType(c.isClient()? "client": "server"); //TODO *** NOT IMEMDIATE *** only two types for now. Review later.
+            n.setBaselineTopology(baseline.contains(n.getId()));
             return n;
         }).collect(Collectors.toList());
     }

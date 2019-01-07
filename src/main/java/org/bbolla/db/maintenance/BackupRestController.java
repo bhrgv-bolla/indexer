@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Enables backup.
- * TODO use this to sync the keys to a db; to recover in case of complete cluster failure / catastrophies. (without minimum downtime)
+ * TODO *** NOT IMMEDIATE FOR FUNCTIONALITY *** use this to sync the keys to a db; to recover in case of complete cluster failure / catastrophies. (without minimum downtime)
  * @author bbolla on 12/27/18
  */
 @RestController
@@ -19,7 +19,7 @@ public class BackupRestController {
 
     @PostMapping("/cache")
     public ResponseEntity<CacheEntryResponse> getEntry(@RequestBody CacheKeyRequest cacheKey) {
-        //TODO use caches.
+        //TODO **** NOT IMMEDIATE ****  use caches.
         return null;
     }
 

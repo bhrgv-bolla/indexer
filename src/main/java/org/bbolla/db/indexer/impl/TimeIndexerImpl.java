@@ -18,8 +18,8 @@ import java.util.stream.Collectors;
 /**
  * Read and write row ranges in a time range.
  * Collect them back very fast. ~3 ms/ 4 ms.
- * TODO tests for edge cases.
- * TODO create a new time index implementation with a treemap<Integer, Long>; in which the row provider.; Replicated store?? is not needed.
+ * TODO *** IMMMEDIATE FOR ROBUST CODE *** tests for edge cases.
+ * TODO *** IMPROVEMENT *** create a new time index implementation with a treemap<Integer, Long>; in which the row provider.; Replicated store?? is not needed.
  */
 @Slf4j
 public class TimeIndexerImpl implements TimeIndexerSpec {
@@ -32,7 +32,6 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
 
 
     public TimeIndexerImpl(Server server) {
-        //TODO ***URGENT*** configure native persistence for time indexer.
         Ignite ignite = server.getIgniteInstance();
         this.trMap = ignite.getOrCreateCache(TIME_INDEXER_CACHE);
         this.dateKeys = ignite.getOrCreateCache(DATE_KEYS_CACHE);
@@ -98,7 +97,7 @@ public class TimeIndexerImpl implements TimeIndexerSpec {
                 long[] rowsInThisDay = new long[]{rowsFirst[0], rowsLast[1]};
                 rrMap.put(dayKey, rowsInThisDay);
             } else {
-                exceptions.add("Couldn't find rows for day : "+ dayKey); //TODO bubble these exceptions.
+                exceptions.add("Couldn't find rows for day : "+ dayKey); //TODO ***IMMEDIATE FOR ROBUST CODE*** bubble these exceptions.
             }
         }
 

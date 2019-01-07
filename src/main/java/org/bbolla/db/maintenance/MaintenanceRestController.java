@@ -19,7 +19,7 @@ public class MaintenanceRestController {
     @Autowired
     private Server server;
 
-    private static final String PASSWORD_HASHED = "33F6ECB99522960D01FD1CC09DE62B49"; //TODO different per deployment
+    private static final String PASSWORD_HASHED = "33F6ECB99522960D01FD1CC09DE62B49"; //TODO *** NOT UNRGENT --  IMPROVEMENT *** different per deployment
 
 
     @PutMapping("/activate")
@@ -72,7 +72,7 @@ public class MaintenanceRestController {
         return ResponseEntity.ok(server.removeNode(nodeId));
     }
 
-    //TODO rebalance from a set of consistent ids.
+    //TODO *** NOT URGGENT*** rebalance from a set of consistent ids.
     @PutMapping("/rebalance/custom")
     public ResponseEntity<Object> customRebalance(@RequestHeader("password") String pass, @RequestBody RebalanceRequest request) {
         return ResponseEntity.ok(server.rebalance(request.getConsistendIds()));

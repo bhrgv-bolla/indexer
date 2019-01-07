@@ -10,7 +10,7 @@ public class CustomAffinityFunction extends RendezvousAffinityFunction {
 
     public CustomAffinityFunction() {
         super();
-        setExcludeNeighbors(true); //TODO review
+        setExcludeNeighbors(true); //If two instances are run from the same host; this flag will exclude setting a backup on the same host machine.
         setPartitions(366); //leap years; max days in an year; since doy is used for partitioning.
     }
 

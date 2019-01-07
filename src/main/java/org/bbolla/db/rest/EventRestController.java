@@ -39,7 +39,7 @@ public class EventRestController {
 
 
     @PostMapping("/submit/events")
-    public ResponseEntity<Object> postNewRows(@RequestBody EventsRequest request) { //TODO will miss what dimensions are being indexed.
+    public ResponseEntity<Object> postNewRows(@RequestBody EventsRequest request) {
         storage.store(request.timestamp(), request.getRows());
         indexer.addTimeIndex(request.timestamp(), request.timestamp(), request.getRowRange()[0], request.getRowRange()[1]);
         for (DimensionBitmap dim : request.getDimensionBitmaps()) {
@@ -102,7 +102,7 @@ public class EventRestController {
     }
 
     /**
-     * Uodates a record; TODO today doesn't check if it already exists or not. What checks should be made?
+     * Uodates a record; TODO *** BETTER CODE *** today doesn't check if it already exists or not. What checks should be made?
      *
      * @param key
      * @param record

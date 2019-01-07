@@ -36,9 +36,14 @@ import java.util.stream.Collectors;
 public class IndexerImpl implements IndexerSpec {
 
     //Maximum size.
-    private static final int MAX_CACHE_PARTITION_SIZE_IN_BYTES = 10000000;
+    private static final int MAX_CACHE_PARTITION_SIZE_IN_BYTES = 10000000; // 10 MB.
     private static final String DIMENSIONS_CACHE = "dimensions_cache";
     private Ignite ignite;
+
+    static {
+        //TODO ***NOT VERY IMMEDIATE*** comment on what is the write read speed for a {@link MAX_CACHE_PARTITION_SIZE_IN_BYTES} file on this node.
+        log.info("Yet to be Implemented: Time to retrieve the {} file is {} ms", MAX_CACHE_PARTITION_SIZE_IN_BYTES, -1);
+    }
 
     /*
         Stores dim_val_partition bitmap.
@@ -49,9 +54,9 @@ public class IndexerImpl implements IndexerSpec {
         Stores information about the number of partitions.
      */
     //TODO could i use the meta info; to see if it is worth pulling that partition?
-    //TODO also if the time interval is less than a day <= we pull all the partitions?
-    //TODO could this be reduced by maintaining not max_cache but maintaining partitions buy rows(?)
-    //TODO dynamic partition size (storing the row ranges with the partition helps).
+    //  also if the time interval is less than a day <= we pull all the partitions?
+    //  could this be reduced by maintaining not max_cache but maintaining partitions buy rows(?)
+    //  dynamic partition size (storing the row ranges with the partition helps).
     private IgniteCache<String, List<DimensionPartitionMetaInfo>> dmMap; //Dimension Meta Info Map.
     private TimeIndexerSpec ti;
 
@@ -88,7 +93,7 @@ public class IndexerImpl implements IndexerSpec {
         return "d_" + today.withTimeAtStartOfDay().toString() + "_p_" + key + "_v_" + val + "_pn_" + partitionNumber;
     }
 
-    //TODO ***URGENT*** enable locking; let the use-case decide if locking is required; while using implementation.
+    //TODO ***NOT IMMEDIATE*** enable locking; let the use-case decide if locking is required; while using implementation.
     @Override
     public void index(DateTime startOfDay, String key, String val, Roaring64NavigableMap rows) {
         rows.runOptimize();
@@ -201,7 +206,7 @@ public class IndexerImpl implements IndexerSpec {
         allFutures.forEach(
                 f -> {
                     try {
-                        FilterResult fr = f.get(100, TimeUnit.MILLISECONDS); //TODO get all futures in 100 millliseconds not each future in 100 milliseconds.
+                        FilterResult fr = f.get(100, TimeUnit.MILLISECONDS); //TODO ***IMMEDIATE*** get all futures in 1000 millliseconds not each future in 100 milliseconds.
                         Roaring64NavigableMap allFiltersForDay = fr.getRows().toBitMap();
                         //one day
                         long[] rows = rowsInInterval.get(fr.date().toString());
@@ -224,14 +229,14 @@ public class IndexerImpl implements IndexerSpec {
     //TODO ***ENHANCEMENT*** ***URGENT*** pass the row ranges to only pull those keys
     private IgniteFuture<FilterResult> getRowsIDsForADay(Map<String, String> filters, DateTime day) throws NoDataExistsException {
         /**
-         * TODO Retry before failing the feature.
+         * TODO ***FAILURE RESILENT (KINDA URGENT)*** Retry before failing the feature.
          */
         List<List<String>> keys = keys(filters, day);
         String sampleKeyForPartitionLookup = null; //Sample to tell ignite; where to run the block of code.
 
 
         { //This block of code is to check atleast one key exists.
-            //TODO ***ENHANCEMENT*** if for a day atleast for one filter there are no rows; this means there is no data; since filters supported are AND today; no OR filters.
+            //TODO ***ENHANCEMENT*** if for a day atleast for one filter there are no rows; this means there is no data; since filters supported are AND today; no OR filters; Kind of fast response for no response.
             List<String> allKeys = keys.stream().flatMap(k -> k.stream()).collect(Collectors.toList()); //allKeys mixed
             log.info("All Keys: {}", allKeys);
             if (allKeys.size() == 0) throw new NoDataExistsException();
